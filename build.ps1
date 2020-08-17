@@ -111,7 +111,9 @@ try {
     }
 
     # revert props file
-    Invoke-Expression "git checkout `"$PropsPath`"" 2>&1 
+    if ($Force -eq $False) {
+        Invoke-Expression "git checkout `"$PropsPath`"" 2>&1
+    }
 }
 finally {
     Set-Location $location
