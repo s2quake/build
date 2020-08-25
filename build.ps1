@@ -97,6 +97,9 @@ try {
     $doc.Project.PropertyGroup.Version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
     $doc.Save($PropsPath)
 
+    $assemblyVersion = $doc.Project.PropertyGroup.AssemblyVersion
+    $fileVersion = $fileVersion
+
     # build project
     Invoke-Expression "dotnet build `"$SolutionPath`" $frameworkOption --verbosity minimal --nologo"
     if ($LastExitCode -ne 0) {
