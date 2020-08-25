@@ -98,7 +98,8 @@ try {
     $doc.Save($PropsPath)
 
     $assemblyVersion = $doc.Project.PropertyGroup.AssemblyVersion
-    $fileVersion = $fileVersion
+    $fileVersion = $doc.Project.PropertyGroup.FileVersion
+    $version = $doc.Project.PropertyGroup.Version
 
     # build project
     Invoke-Expression "dotnet build `"$SolutionPath`" $frameworkOption --verbosity minimal --nologo"
@@ -109,6 +110,7 @@ try {
         Write-Host ""
         Write-Host "AssemblyVersion: $assemblyVersion"
         Write-Host "FileVersion: $fileVersion"
+        Write-Host "Version: $version"
         Write-Host "revision: $revision"
         Write-Host ""
     }
