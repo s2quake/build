@@ -6,7 +6,9 @@
         as with the help and documentation for a function or script.
 #>
 param(
-    [string]$SolutionPath = "",
+    [Parameter(Mandatory = $true)]
+    [string]$SolutionPath,
+    [Parameter(Mandatory = $true)]
     [string[]]$PropsPath,
     [string]$AssemblyOriginatorKeyFile = "",
     [switch]$Force
@@ -42,7 +44,7 @@ function Test-NET45 {
         if ($LastExitCode -ne 0) {
             throw "Unable to build to .NET Framework 4.5."
         }
-        return $True
+        return $true
     }
     catch {
         Write-Warning $_.Exception.Message
@@ -60,7 +62,7 @@ function Test-NET45 {
             Write-Warning "    .NET Framework 4.5 targeting pack"
         }
         Write-Host ""
-        return $False
+        return $false
     }
 }
 
@@ -78,7 +80,8 @@ function Assert-Changes {
         }
     }
     catch {
-        if ($Force -eq $False) {
+        if ($Force -eq $false) {
+            Write-Error $WorkingPath
             Write-Error $_.Exception.Message
             exit 1
         }
@@ -164,7 +167,7 @@ function Initialize-Sign {
     $doc.Save($ProjectPath)
 }
 
-function Build-Solution {
+function Invoke-Build {
     param(
         [string]$SolutionPath,
         [string]$FrameworkOption
@@ -186,24 +189,26 @@ function Restore-ProjectPath {
     }
 }
 
-$revision = "unversioned"
-$frameworkOption = ""
 $location = Get-Location
-
 try {
-    # Set-Location $WorkingPath
-
+    $frameworkOption = ""
     $SolutionPath = Resolve-Path $SolutionPath
     $WorkingPath = Split-Path $SolutionPath
     $PropsPath = Resolve-Path $PropsPath
-    $AssemblyOriginatorKeyFile = Resolve-Path $AssemblyOriginatorKeyFile
+    if ("" -ne $AssemblyOriginatorKeyFile) {
+        $AssemblyOriginatorKeyFile = Resolve-Path $AssemblyOriginatorKeyFile
+    }
 
     Write-Host "SolutionPath: $SolutionPath"
     Write-Host "WorkingPath: $WorkingPath"
-    Write-Host "PropsPath: $PropsPath"
+    Write-Host "PropsPath:"
+    $PropsPath | ForEach-Object {
+        Write-Host "    $_"
+    }
     Write-Host "KeyPath: $AssemblyOriginatorKeyFile"
     Write-Host ""
     
+    # validate to build with netcoreapp3.1 or net45
     Assert-NETCore -Version "3.1"
     if (!(Test-NET45 -SolutionPath $SolutionPath)) {
         $frameworkOption = "--framework netcoreapp3.1"
@@ -211,41 +216,24 @@ try {
 
     # check if there are any changes in the repository.
     Assert-Changes -WorkingPath $WorkingPath -Force:$Force
+    $PropsPath | ForEach-Object {
+        $directory = Split-Path $_
+        Assert-Changes -WorkingPath $directory -Force:$Force
+    }
 
-    $revision = Get-Revision -Path $WorkingPath
-
-
-    # recored version to props file
-    # $PropsPath | ForEach-Object {
-    #     Initialize-Version $_
-    #     Initialize-Sign -ProjectPath $_ -KeyPath $AssemblyOriginatorKeyFile
-    # }
-    # try {
-    #     [xml]$doc = Get-Content $PropsPath -Encoding UTF8
-    #     $doc.Project.PropertyGroup.Version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
-    #     if ("" -eq $AssemblyOriginatorKeyFile) {
-    #         $doc.Project.PropertyGroup.AssemblyOriginatorKeyFile = $AssemblyOriginatorKeyFile
-    #         $doc.Project.PropertyGroup.DelaySign = $FALSE
-    #     }
-    #     $doc.Save($PropsPath)
-
-    #     $assemblyVersion = $doc.Project.PropertyGroup.AssemblyVersion
-    #     $fileVersion = $doc.Project.PropertyGroup.FileVersion
-    #     $version = $doc.Project.PropertyGroup.Version
-    # }
-    # catch {
-    #     Write-Error $_.Exception.Message
-    #     exit 1
-    # }
-
+    # recored version and keypath to props file
+    $PropsPath | ForEach-Object {
+        Initialize-Version $_
+        if ("" -ne $AssemblyOriginatorKeyFile) {
+            Initialize-Sign -ProjectPath $_ -KeyPath $AssemblyOriginatorKeyFile
+        }
+    }
+ 
     # build project
-    Build-Solution -SolutionPath $SolutionPath -Framework $frameworkOption
+    Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption
     if ($LastExitCode -eq 0) {
         Write-Host ""
-        Write-Host "AssemblyVersion: $assemblyVersion"
-        Write-Host "FileVersion: $fileVersion"
-        Write-Host "Version: $version"
-        Write-Host "revision: $revision"
+        Write-Host "build completed."
         Write-Host ""
     }
     else {
@@ -254,11 +242,10 @@ try {
 }
 finally {
     # revert props file
-    if ($Force -eq $False) {
+    if ($Force -eq $false) {
         $PropsPath | ForEach-Object {
             Restore-ProjectPath $_
         }
-        # Invoke-Expression "git checkout `"$PropsPath`"" 2>&1
     }
     Set-Location $location
 }

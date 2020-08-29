@@ -1,6 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="..\netfx.props" />
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-  </PropertyGroup>
-</Project>

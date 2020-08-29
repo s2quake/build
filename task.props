@@ -1,3 +1,0 @@
-<Project>
-  <Import Project="src\ConsoleApp1\ConsoleApp1.csproj" />
-</Project>
