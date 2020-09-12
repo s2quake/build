@@ -11,6 +11,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]]$PropsPath,
     [string]$AssemblyOriginatorKeyFile = "",
+    [switch]$OmitSign,
     [switch]$Force
 )
 
@@ -142,7 +143,8 @@ function Initialize-Version {
 function Initialize-Sign {
     param (
         [string]$ProjectPath,
-        [string]$KeyPath
+        [string]$KeyPath,
+        [switch]$OmitSign
 
     )
     [xml]$doc = Get-Content $ProjectPath -Encoding UTF8
@@ -154,7 +156,12 @@ function Initialize-Sign {
         
     $propertyGroupNode.AppendChild($node) | Out-Null
     $node = $doc.CreateElement("SignAssembly", $doc.DocumentElement.NamespaceURI)
-    $text = $doc.CreateTextNode("true")
+    if ($OmitSign) {
+        $text = $doc.CreateTextNode("false")
+    }
+    else {
+        $text = $doc.CreateTextNode("true")
+    }
     $node.AppendChild($text) | Out-Null
     $propertyGroupNode.AppendChild($node) | Out-Null
 
@@ -225,7 +232,7 @@ try {
     $PropsPath | ForEach-Object {
         Initialize-Version $_
         if ("" -ne $AssemblyOriginatorKeyFile) {
-            Initialize-Sign -ProjectPath $_ -KeyPath $AssemblyOriginatorKeyFile
+            Initialize-Sign -ProjectPath $_ -KeyPath $AssemblyOriginatorKeyFile -OmitSign:$OmitSign
         }
     }
  
