@@ -276,7 +276,7 @@ function Write-Property {
 
 $dateTime = Get-Date
 if ($LogPath -eq "") {
-    $dateTimeText = $dateTime.ToString("yyyy-MM-HH:mm:ss")
+    $dateTimeText = $dateTime.ToString("yyyy-MM-HH-mm-ss")
     $logDirectory = Join-Path (Get-Location) "logs"
     if (!(Test-Path $logDirectory)) {
         New-Item $logDirectory -ItemType Directory
