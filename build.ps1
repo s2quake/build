@@ -125,7 +125,8 @@ function Get-Revision {
 
 function Initialize-Version {
     param (
-        [string]$ProjectPath
+        [string]$ProjectPath,
+        [string[]]$Frameworks
     )
     try {
         $revision = Get-Revision $ProjectPath
@@ -134,11 +135,12 @@ function Initialize-Version {
             throw "there is no version"
         }
         $version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
+        $versions = $Frameworks | ForEach-Object { "$($doc.Project.PropertyGroup.FileVersion)-$_-$revision" }
         $doc.Project.PropertyGroup.Version = $version
         $doc.Save($ProjectPath)
         
         Write-Property "Path" $ProjectPath
-        Write-Property "Version" $version
+        Write-Property "Version" $versions
     }
     catch {
         Write-Log $_.Exception.Message -LogType "Error"
@@ -196,7 +198,8 @@ function Invoke-Build {
         [string]$SolutionPath,
         [string]$FrameworkOption
     )
-    Invoke-Expression "dotnet build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release" | Tee-Object -Append $LogPath
+    $expression = "dotnet build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release"
+    Invoke-Expression $expression | Tee-Object -Append $LogPath
 }
 
 function Restore-ProjectPath {
@@ -227,22 +230,22 @@ function Write-Log {
     param(
         [string]$Text = "",
         [ValidateSet('Output', 'Error', 'Warning')]
-        [string]$LogType = "Output",
-        [ValidateSet('None', 'Code')]
-        [string]$Style = "None",
-        [switch]$NoNewLine
+        [string]$LogType = "Output"
     )
-    $New
     switch ($LogType) {
-        "Output" { Write-Host $Text -NoNewline:$NoNewLine }
+        "Output" { Write-Host $Text }
         "Error" { Write-Error $Text }
         "Warning" { Write-Warning $Text }
     }
-    switch ($Style) {
-        "None" { Add-Content -Path $LogPath -Value $Text -NoNewline:$NoNewLine }
-        "Code" { Add-Content -Path $LogPath -Value "    $Text" -NoNewline:$NoNewLine }
-    }
-    
+    Add-Content -Path $LogPath -Value $Text
+}
+
+function Start-Log {
+    Add-Content -Path $LogPath -Value "``````plain"
+}
+
+function Stop-Log {
+    Add-Content -Path $LogPath -Value "``````"
 }
 
 function Write-Column {
@@ -287,6 +290,7 @@ try {
     Write-Header "Initialize"
     
     $frameworkOption = ""
+    $frameworks = "netcoreapp3.1", "net45"
     $SolutionPath = Resolve-Path $SolutionPath
     $WorkingPath = Split-Path $SolutionPath
     $PropsPath = Resolve-Path $PropsPath
@@ -305,49 +309,61 @@ try {
     Write-Log ""
 
     Write-Header "Framework Option"
+    Start-Log
     Assert-NETCore -Version "3.1"
     if (!(Test-NET45 -SolutionPath $SolutionPath)) {
         $frameworkOption = "--framework netcoreapp3.1"
-        Write-Log $frameworkOption
+        $frameworks = ,"netcoreapp3.1"
+        Write-Log "netcoreapp3.1"
     }
     else {
-        Write-Log "all"
-        Write-Log
+        Write-Log "netcoreapp3.1"
+        Write-Log "net45"
     }
+    Stop-Log
+    Write-Log
 
     # check if there are any changes in the repository.
     Write-Header "Repository changes"
+    Start-Log
     Assert-Changes -WorkingPath $WorkingPath -Force:$Force
     $PropsPath | ForEach-Object {
         $directory = Split-Path $_
         Assert-Changes -WorkingPath $directory -Force:$Force
     }
     Write-Log "no changes."
+    Stop-Log
     Write-Log
 
     # recored version and keypath to props file
     Write-Header "Set Information to props files"
     $PropsPath | ForEach-Object {
         Write-Column "Name", "Value"
-        Initialize-Version $_
+        Initialize-Version $_ $frameworks
         Initialize-Sign -ProjectPath $_ -KeyPath $KeyPath -OmitSign:$OmitSign -IsPrivate:$IsPrivate
         Write-Log
     }
  
     # build project
     Write-Header "Build"
+    Start-Log
     Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption
+    Stop-Log
     Write-Log
 
     # record build result
     Write-Header "Result"
+    Start-Log
     if ($LastExitCode -eq 0) {
-        Write-Log "$(Get-Date)"
+        $lastTime = Get-Date
+        $timeSpan = $lastTime - $dateTime
+        Write-Log "$dateTime ~ $lastTime ($timeSpan)"
         Write-Log "build completed."
     }
     else {
         Write-Log "build failed" -LogType "Error"
     }
+    Stop-Log
 }
 finally {
     # revert props file
