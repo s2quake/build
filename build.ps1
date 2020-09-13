@@ -202,7 +202,9 @@ function Invoke-Build {
         [string]$FrameworkOption
     )
     $expression = "dotnet build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release"
-    Invoke-Expression $expression | Tee-Object -Append $LogPath
+    Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
+        Write-Log $_
+    }
 }
 
 function Restore-ProjectPath {
@@ -286,7 +288,7 @@ if ($LogPath -eq "") {
     }
     $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
 }
-Set-Content $LogPath ""
+Set-Content $LogPath "" -Encoding UTF8
 
 $location = Get-Location
 $encoding = [Console]::OutputEncoding
