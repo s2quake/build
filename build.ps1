@@ -304,7 +304,7 @@ try {
     }
 
     Write-Column "Name", "Value"
-    Write-Property "DateTime" $dateTime
+    Write-Property "DateTime" $dateTime.ToString()
     Write-Property "SolutionPath" $SolutionPath
     Write-Property "WorkingPath" $WorkingPath
     Write-Property "PropsPath" $PropsPath
@@ -362,7 +362,9 @@ try {
     if ($LastExitCode -eq 0) {
         $lastTime = Get-Date
         $timeSpan = $lastTime - $dateTime
-        Write-Log "$dateTime ~ $lastTime ($timeSpan)"
+        Write-Log "Start Time  : $($dateTime.ToString())"
+        Write-Log "End Time    : $($lastTime.ToString())"
+        Write-Log "Elapsed time: $timeSpan"
         Write-Log "build completed."
     }
     else {
