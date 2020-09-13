@@ -10,17 +10,11 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]]$PropsPath,
     [string]$KeyPath = "",
+    [string]$LogPath = "",
     [switch]$OmitSign,
     [switch]$IsPrivate,
     [switch]$Force
 )
-
-$dateTime = Get-Date
-$dateTimeText = $dateTime.ToString("yyyy-MM-HH:mm:ss")
-Write-Host $dateTimeText
-# $logPath = Join-Path $PSScriptRoot "$($dateTimeText).md"
-$logPath = Join-Path $PSScriptRoot "build.md"
-Set-Content $logPath ""
 
 function Assert-NETCore {
     param(
@@ -202,7 +196,7 @@ function Invoke-Build {
         [string]$SolutionPath,
         [string]$FrameworkOption
     )
-    Invoke-Expression "dotnet build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release" | Tee-Object -Append $logPath
+    Invoke-Expression "dotnet build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release" | Tee-Object -Append $LogPath
 }
 
 function Restore-ProjectPath {
@@ -226,7 +220,7 @@ function Write-Header {
     )
     $levelText = "".PadRight($Level + 1, '#')
     Write-Host "$levelText $Header"
-    Add-Content -Path $logPath -Value "$levelText $Header", ""
+    Add-Content -Path $LogPath -Value "$levelText $Header", ""
 }
 
 function Write-Log {
@@ -245,8 +239,8 @@ function Write-Log {
         "Warning" { Write-Warning $Text -NoNewline:$NoNewLine }
     }
     switch ($Style) {
-        "None" { Add-Content -Path $logPath -Value $Text -NoNewline:$NoNewLine }
-        "Code" { Add-Content -Path $logPath -Value "    $Text" -NoNewline:$NoNewLine }
+        "None" { Add-Content -Path $LogPath -Value $Text -NoNewline:$NoNewLine }
+        "Code" { Add-Content -Path $LogPath -Value "    $Text" -NoNewline:$NoNewLine }
     }
     
 }
@@ -258,7 +252,7 @@ function Write-Column {
     $items = ($Columns | ForEach-Object { "".PadRight($_.Length, '-') }) -join " | "
     $title = "| $($Columns -join " | ") |"
     $separator = "| $($items) |"
-    Add-Content -Path $logPath -Value $title, $separator
+    Add-Content -Path $LogPath -Value $title, $separator
 }
 
 function Write-Property {
@@ -268,19 +262,30 @@ function Write-Property {
     )
     if ($Values.Length -eq 1) {
         Write-Host "$($Name): $($Values[0])"
-        Add-Content -Path $logPath -Value "| $Name | $($Values[0]) |"
+        Add-Content -Path $LogPath -Value "| $Name | $($Values[0]) |"
     }
     else {
         Write-Host "$($Name):"
         $Values | ForEach-Object { Write-Host "    $_" }
-        Add-Content -Path $logPath -Value "| $Name | $($Values -join "<br>") |"
+        Add-Content -Path $LogPath -Value "| $Name | $($Values -join "<br>") |"
     }
 }
+
+$dateTime = Get-Date
+if ($LogPath -eq "") {
+    $dateTimeText = $dateTime.ToString("yyyy-MM-HH:mm:ss")
+    $logDirectory = Join-Path (Get-Location) "logs"
+    if (!(Test-Path $logDirectory)) {
+        New-Item $logDirectory -ItemType Directory
+    }
+    $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
+}
+Set-Content $LogPath ""
 
 $location = Get-Location
 try {
     Write-Header "Initialize"
-
+    
     $frameworkOption = ""
     $SolutionPath = Resolve-Path $SolutionPath
     $WorkingPath = Split-Path $SolutionPath

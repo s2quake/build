@@ -3,7 +3,7 @@
 
 | Name | Value |
 | ---- | ----- |
-| DateTime | 09/13/2020 12:13:43 |
+| DateTime | 09/13/2020 13:14:40 |
 | SolutionPath | /Users/s2quake-mac/Projects/communication/communication.sln |
 | WorkingPath | /Users/s2quake-mac/Projects/communication |
 | PropsPath | /Users/s2quake-mac/Projects/communication/JSSoft.Library/Directory.Build.props<br>/Users/s2quake-mac/Projects/communication/JSSoft.Library.Commands/Directory.Build.props<br>/Users/s2quake-mac/Projects/communication/JSSoft.Communication/Directory.Build.props |
@@ -53,30 +53,30 @@ no changes.
   JSSoft.Library -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/JSSoft.Library/JSSoft.Library.dll
   JSSoft.Library.Commands -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/JSSoft.Library.Commands/JSSoft.Library.Commands.dll
   JSSoft.Communication -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/JSSoft.Communication/JSSoft.Communication.dll
-  JSSoft.Library.Commands -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/JSSoft.Library.Commands/JSSoft.Library.Commands.dll
-  JSSoft.Library.Random -> /Users/s2quake-mac/Projects/communication/bin/net45/JSSoft.Library.Random/JSSoft.Library.Random.dll
   Server-Simple -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/Server-Simple/server.exe
-  JSSoft.Communication -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/JSSoft.Communication/JSSoft.Communication.dll
+  JSSoft.Library.Random -> /Users/s2quake-mac/Projects/communication/bin/net45/JSSoft.Library.Random/JSSoft.Library.Random.dll
   Client-Simple -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/Client-Simple/client.exe
-  Client -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/Client/client.exe
-  JSSoft.Library.Random -> /Users/s2quake-mac/Projects/communication/bin/netcoreapp3.1/JSSoft.Library.Random/JSSoft.Library.Random.dll
-  Client-Simple -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Client-Simple/client.dll
+  JSSoft.Library.Commands -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/JSSoft.Library.Commands/JSSoft.Library.Commands.dll
   Server-MEF -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/Server-MEF/server.exe
-  Server-Simple -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Server-Simple/server.dll
+  Client -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/Client/client.exe
+  Server -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/Server/server.exe
   Client-MEF -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/Client-MEF/client.exe
-  Server -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Server/server.dll
-  Client-MEF -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Client-MEF/client.dll
+  JSSoft.Communication -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/JSSoft.Communication/JSSoft.Communication.dll
+  Client-Simple -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Client-Simple/client.dll
+  JSSoft.Library.Random -> /Users/s2quake-mac/Projects/communication/bin/netcoreapp3.1/JSSoft.Library.Random/JSSoft.Library.Random.dll
+  Server-Simple -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Server-Simple/server.dll
   Server-MEF -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Server-MEF/server.dll
   Client -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Client/client.dll
-  Server -> /Users/s2quake-mac/Projects/communication/bin/Release/net45/Server/server.exe
+  Client-MEF -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Client-MEF/client.dll
+  Server -> /Users/s2quake-mac/Projects/communication/bin/Release/netcoreapp3.1/Server/server.dll
 
 빌드했습니다.
     경고 0개
     오류 0개
 
-경과 시간: 00:00:03.70
+경과 시간: 00:00:07.61
 
 # Result
 
-09/13/2020 12:13:49
+09/13/2020 13:14:52
 build completed.
