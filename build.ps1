@@ -9,15 +9,18 @@ param(
     [string]$SolutionPath,
     [Parameter(Mandatory = $true)]
     [string[]]$PropsPath,
-    [string]$AssemblyOriginatorKeyFile = "",
+    [string]$KeyPath = "",
     [switch]$OmitSign,
+    [switch]$IsPrivate,
     [switch]$Force
 )
 
 $dateTime = Get-Date
 $dateTimeText = $dateTime.ToString("yyyy-MM-HH:mm:ss")
 Write-Host $dateTimeText
-$logPath = Join-Path $PSScriptRoot "$($dateTimeText).md"
+# $logPath = Join-Path $PSScriptRoot "$($dateTimeText).md"
+$logPath = Join-Path $PSScriptRoot "build.md"
+Set-Content $logPath ""
 
 function Assert-NETCore {
     param(
@@ -31,9 +34,9 @@ function Assert-NETCore {
     }
     catch {
         Write-Header "Error"
-        Write-Log $_.Exception.Message -IsError
-        Write-Log "Please visit the site below and install it." -IsWarning
-        Write-Log "https://dotnet.microsoft.com/download/dotnet-core/$Version" -IsWarning
+        Write-Log $_.Exception.Message -LogType "Error"
+        Write-Log "Please visit the site below and install it." -LogType "Warning"
+        Write-Log "https://dotnet.microsoft.com/download/dotnet-core/$Version" -LogType "Warning"
         Write-Log ""
         Write-Host 'Press any key to continue...';
         $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
@@ -87,9 +90,8 @@ function Assert-Changes {
     }
     catch {
         if ($Force -eq $false) {
-            Write-Header "Error"
-            Write-Log "WorkingPath: $WorkingPath" -IsError
-            Write-Log $_.Exception.Message -IsError
+            Write-Log "WorkingPath: $WorkingPath" -LogType "Error"
+            Write-Log $_.Exception.Message -LogType "Error"
             exit 1
         }
     }
@@ -119,7 +121,7 @@ function Get-Revision {
         return $revision
     }
     catch {
-        Write-Log $_.Exception.Message -IsError
+        Write-Log $_.Exception.Message -LogType "Error"
         return $null
     }
     finally {
@@ -137,12 +139,15 @@ function Initialize-Version {
         if ($null -eq $doc.Project.PropertyGroup.FileVersion) {
             throw "there is no version"
         }
-        $doc.Project.PropertyGroup.Version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
+        $version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
+        $doc.Project.PropertyGroup.Version = $version
         $doc.Save($ProjectPath)
+        
+        Write-Property "Path" $ProjectPath
+        Write-Property "Version" $version
     }
     catch {
-        Write-Header "Error"
-        Write-Log $_.Exception.Message -IsError
+        Write-Log $_.Exception.Message -LogType "Error"
         exit 1
     }
 }
@@ -151,13 +156,19 @@ function Initialize-Sign {
     param (
         [string]$ProjectPath,
         [string]$KeyPath,
-        [switch]$OmitSign
+        [switch]$OmitSign,
+        [switch]$IsPrivate
     )
     [xml]$doc = Get-Content $ProjectPath -Encoding UTF8
     $propertyGroupNode = $doc.CreateElement("PropertyGroup", $doc.DocumentElement.NamespaceURI)
 
     $node = $doc.CreateElement("DelaySign", $doc.DocumentElement.NamespaceURI)
-    $text = $doc.CreateTextNode("false")
+    if ($IsPrivate) {
+        $text = $doc.CreateTextNode("false")
+    }
+    else {
+        $text = $doc.CreateTextNode("true")
+    }
     $node.AppendChild($text) | Out-Null
         
     $propertyGroupNode.AppendChild($node) | Out-Null
@@ -171,13 +182,19 @@ function Initialize-Sign {
     $node.AppendChild($text) | Out-Null
     $propertyGroupNode.AppendChild($node) | Out-Null
 
-    $node = $doc.CreateElement("AssemblyOriginatorKeyFile", $doc.DocumentElement.NamespaceURI)
-    $text = $doc.CreateTextNode($KeyPath)
-    $node.AppendChild($text) | Out-Null
-    $propertyGroupNode.AppendChild($node) | Out-Null
+    if ($KeyPath) {
+        $node = $doc.CreateElement("AssemblyOriginatorKeyFile", $doc.DocumentElement.NamespaceURI)
+        $text = $doc.CreateTextNode($KeyPath)
+        $node.AppendChild($text) | Out-Null
+        $propertyGroupNode.AppendChild($node) | Out-Null
+    }
 
     $doc.Project.AppendChild($propertyGroupNode) | Out-Null
     $doc.Save($ProjectPath)
+
+    Write-Property "DelaySign" "$(!$IsPrivate)"
+    Write-Property "SignAssembly" "$(!$OmitSign)"
+    Write-Property "AssemblyOriginatorKeyFile" $KeyPath
 }
 
 function Invoke-Build {
@@ -214,20 +231,24 @@ function Write-Header {
 
 function Write-Log {
     param(
-        [string]$Text,
-        [switch]$IsError,
-        [switch]$IsWarning
+        [string]$Text = "",
+        [ValidateSet('Output', 'Error', 'Warning')]
+        [string]$LogType = "Output",
+        [ValidateSet('None', 'Code')]
+        [string]$Style = "None",
+        [switch]$NoNewLine
     )
-    if ($IsError) {
-        Write-Error $Text
+    $New
+    switch ($LogType) {
+        "Output" { Write-Host $Text -NoNewline:$NoNewLine }
+        "Error" { Write-Error $Text -NoNewline:$NoNewLine }
+        "Warning" { Write-Warning $Text -NoNewline:$NoNewLine }
     }
-    elseif ($IsWarning) {
-        Write-Warning $Text
+    switch ($Style) {
+        "None" { Add-Content -Path $logPath -Value $Text -NoNewline:$NoNewLine }
+        "Code" { Add-Content -Path $logPath -Value "    $Text" -NoNewline:$NoNewLine }
     }
-    else {
-        Write-Host $Text
-    }
-    Add-Content -Path $logPath -Value $Text, ""
+    
 }
 
 function Write-Column {
@@ -240,12 +261,20 @@ function Write-Column {
     Add-Content -Path $logPath -Value $title, $separator
 }
 
-function Write-Row {
+function Write-Property {
     param(
-        [string[]]$Fields
+        [string]$Name,
+        [string[]]$Values
     )
-    $text = "| $($Fields -join " | ") |"
-    Add-Content -Path $logPath -Value $text
+    if ($Values.Length -eq 1) {
+        Write-Host "$($Name): $($Values[0])"
+        Add-Content -Path $logPath -Value "| $Name | $($Values[0]) |"
+    }
+    else {
+        Write-Host "$($Name):"
+        $Values | ForEach-Object { Write-Host "    $_" }
+        Add-Content -Path $logPath -Value "| $Name | $($Values -join "<br>") |"
+    }
 }
 
 $location = Get-Location
@@ -256,71 +285,63 @@ try {
     $SolutionPath = Resolve-Path $SolutionPath
     $WorkingPath = Split-Path $SolutionPath
     $PropsPath = Resolve-Path $PropsPath
-    if ("" -ne $AssemblyOriginatorKeyFile) {
-        $AssemblyOriginatorKeyFile = Resolve-Path $AssemblyOriginatorKeyFile
+    if ("" -ne $KeyPath) {
+        $KeyPath = Resolve-Path $KeyPath
     }
 
     Write-Column "Name", "Value"
-    Write-Row "DateTime", $dateTime
-    Write-Row "SolutionPath", $SolutionPath
-    Write-Row "WorkingPath", $WorkingPath
-    $PropsPath | ForEach-Object {
-        Write-Row "PropsPath", $_
-    }
-    Write-Row "KeyPath", $AssemblyOriginatorKeyFile
-    Write-Row "OmitSign", $OmitSign
-    Write-Row "Force", $Force
+    Write-Property "DateTime" $dateTime
+    Write-Property "SolutionPath" $SolutionPath
+    Write-Property "WorkingPath" $WorkingPath
+    Write-Property "PropsPath" $PropsPath
+    Write-Property "KeyPath" $KeyPath
+    Write-Property "OmitSign" $OmitSign
+    Write-Property "Force" $Force
     Write-Log ""
 
-    Write-Host "SolutionPath: $SolutionPath"
-    Write-Host "WorkingPath: $WorkingPath"
-    Write-Host "PropsPath:"
-    $PropsPath | ForEach-Object {
-        Write-Host "    $_"
-    }
-    Write-Host "KeyPath: $AssemblyOriginatorKeyFile"
-    Write-Host ""
-    
-    # validate to build with netcoreapp3.1 or net45
     Write-Header "Framework Option"
     Assert-NETCore -Version "3.1"
     if (!(Test-NET45 -SolutionPath $SolutionPath)) {
         $frameworkOption = "--framework netcoreapp3.1"
         Write-Log $frameworkOption
-    } else {
-        Write-Log "all"
     }
-    Write-Log ""
+    else {
+        Write-Log "all"
+        Write-Log
+    }
 
     # check if there are any changes in the repository.
+    Write-Header "Repository changes"
     Assert-Changes -WorkingPath $WorkingPath -Force:$Force
     $PropsPath | ForEach-Object {
         $directory = Split-Path $_
         Assert-Changes -WorkingPath $directory -Force:$Force
     }
+    Write-Log "no changes."
+    Write-Log
 
     # recored version and keypath to props file
+    Write-Header "Set Information to props files"
     $PropsPath | ForEach-Object {
+        Write-Column "Name", "Value"
         Initialize-Version $_
-        if ("" -ne $AssemblyOriginatorKeyFile) {
-            Initialize-Sign -ProjectPath $_ -KeyPath $AssemblyOriginatorKeyFile -OmitSign:$OmitSign
-        }
+        Initialize-Sign -ProjectPath $_ -KeyPath $KeyPath -OmitSign:$OmitSign -IsPrivate:$IsPrivate
+        Write-Log
     }
  
     # build project
     Write-Header "Build"
     Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption
-    Write-Log ""
+    Write-Log
 
     # record build result
     Write-Header "Result"
     if ($LastExitCode -eq 0) {
         Write-Log "$(Get-Date)"
         Write-Log "build completed."
-        Write-Log ""
     }
     else {
-        Write-Log "build failed" -IsError
+        Write-Log "build failed" -LogType "Error"
     }
 }
 finally {
