@@ -79,13 +79,16 @@ function Assert-Changes {
         Set-Location $WorkingPath
         $changes = Invoke-Expression "git status --porcelain"
         if ($changes) {
-            throw "git repository has changes. build aborted."
+            throw $changes
         }
     }
     catch {
         if ($Force -eq $false) {
             Write-Log "WorkingPath: $WorkingPath" -LogType "Error"
+            Write-Log
             Write-Log $_.Exception.Message -LogType "Error"
+            Write-Log
+            Write-Log "git repository has changes. build aborted." -LogType "Error"
             exit 1
         }
     }
