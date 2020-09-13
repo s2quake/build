@@ -235,8 +235,8 @@ function Write-Log {
     $New
     switch ($LogType) {
         "Output" { Write-Host $Text -NoNewline:$NoNewLine }
-        "Error" { Write-Error $Text -NoNewline:$NoNewLine }
-        "Warning" { Write-Warning $Text -NoNewline:$NoNewLine }
+        "Error" { Write-Error $Text }
+        "Warning" { Write-Warning $Text }
     }
     switch ($Style) {
         "None" { Add-Content -Path $LogPath -Value $Text -NoNewline:$NoNewLine }
