@@ -289,7 +289,9 @@ if ($LogPath -eq "") {
 Set-Content $LogPath ""
 
 $location = Get-Location
+$encoding = [Console]::OutputEncoding
 try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     Write-Header "Initialize"
     
     $frameworkOption = ""
@@ -311,7 +313,7 @@ try {
     Write-Property "Force" $Force
     Write-Log ""
 
-    Write-Header "Framework Option"
+    Write-Header "TargetFrameworks"
     Start-Log
     Assert-NETCore -Version "3.1"
     if (!(Test-NET45 -SolutionPath $SolutionPath)) {
@@ -378,5 +380,6 @@ finally {
             Restore-ProjectPath $_
         }
     }
+    [Console]::OutputEncoding = $encoding
     Set-Location $location
 }
