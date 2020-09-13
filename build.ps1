@@ -363,6 +363,9 @@ try {
     else {
         Write-Log "build failed" -LogType "Error"
     }
+    Write-Host
+    Write-Host "LogPath: $LogPath"
+    Write-Host
     Stop-Log
 }
 finally {
