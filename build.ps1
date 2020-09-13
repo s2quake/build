@@ -1,9 +1,8 @@
 <#
     .SYNOPSIS
-        Really long comment blocks are tedious to keep commented in single-line mode.
+        빌드
     .DESCRIPTION
-        Particularly when the comment must be frequently edited,
-        as with the help and documentation for a function or script.
+        
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -14,6 +13,11 @@ param(
     [switch]$OmitSign,
     [switch]$Force
 )
+
+$dateTime = Get-Date
+$dateTimeText = $dateTime.ToString("yyyy-MM-HH:mm:ss")
+Write-Host $dateTimeText
+$logPath = Join-Path $PSScriptRoot "$($dateTimeText).md"
 
 function Assert-NETCore {
     param(
@@ -26,10 +30,11 @@ function Assert-NETCore {
         }
     }
     catch {
-        Write-Error $_.Exception.Message
-        Write-Warning "Please visit the site below and install it."
-        Write-Warning "https://dotnet.microsoft.com/download/dotnet-core/$Version"
-        Write-Host ""
+        Write-Header "Error"
+        Write-Log $_.Exception.Message -IsError
+        Write-Log "Please visit the site below and install it." -IsWarning
+        Write-Log "https://dotnet.microsoft.com/download/dotnet-core/$Version" -IsWarning
+        Write-Log ""
         Write-Host 'Press any key to continue...';
         $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
         exit 1
@@ -82,8 +87,9 @@ function Assert-Changes {
     }
     catch {
         if ($Force -eq $false) {
-            Write-Error $WorkingPath
-            Write-Error $_.Exception.Message
+            Write-Header "Error"
+            Write-Log "WorkingPath: $WorkingPath" -IsError
+            Write-Log $_.Exception.Message -IsError
             exit 1
         }
     }
@@ -113,7 +119,7 @@ function Get-Revision {
         return $revision
     }
     catch {
-        Write-Error $_.Exception.Message
+        Write-Log $_.Exception.Message -IsError
         return $null
     }
     finally {
@@ -135,7 +141,8 @@ function Initialize-Version {
         $doc.Save($ProjectPath)
     }
     catch {
-        Write-Error $_.Exception.Message
+        Write-Header "Error"
+        Write-Log $_.Exception.Message -IsError
         exit 1
     }
 }
@@ -145,7 +152,6 @@ function Initialize-Sign {
         [string]$ProjectPath,
         [string]$KeyPath,
         [switch]$OmitSign
-
     )
     [xml]$doc = Get-Content $ProjectPath -Encoding UTF8
     $propertyGroupNode = $doc.CreateElement("PropertyGroup", $doc.DocumentElement.NamespaceURI)
@@ -179,7 +185,7 @@ function Invoke-Build {
         [string]$SolutionPath,
         [string]$FrameworkOption
     )
-    Invoke-Expression "dotnet build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release"
+    Invoke-Expression "dotnet build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release" | Tee-Object -Append $logPath
 }
 
 function Restore-ProjectPath {
@@ -196,8 +202,56 @@ function Restore-ProjectPath {
     }
 }
 
+function Write-Header {
+    param(
+        [string]$Header,
+        [int]$Level = 0
+    )
+    $levelText = "".PadRight($Level + 1, '#')
+    Write-Host "$levelText $Header"
+    Add-Content -Path $logPath -Value "$levelText $Header", ""
+}
+
+function Write-Log {
+    param(
+        [string]$Text,
+        [switch]$IsError,
+        [switch]$IsWarning
+    )
+    if ($IsError) {
+        Write-Error $Text
+    }
+    elseif ($IsWarning) {
+        Write-Warning $Text
+    }
+    else {
+        Write-Host $Text
+    }
+    Add-Content -Path $logPath -Value $Text, ""
+}
+
+function Write-Column {
+    param(
+        [string[]]$Columns
+    )
+    $items = ($Columns | ForEach-Object { "".PadRight($_.Length, '-') }) -join " | "
+    $title = "| $($Columns -join " | ") |"
+    $separator = "| $($items) |"
+    Add-Content -Path $logPath -Value $title, $separator
+}
+
+function Write-Row {
+    param(
+        [string[]]$Fields
+    )
+    $text = "| $($Fields -join " | ") |"
+    Add-Content -Path $logPath -Value $text
+}
+
 $location = Get-Location
 try {
+    Write-Header "Initialize"
+
     $frameworkOption = ""
     $SolutionPath = Resolve-Path $SolutionPath
     $WorkingPath = Split-Path $SolutionPath
@@ -205,6 +259,18 @@ try {
     if ("" -ne $AssemblyOriginatorKeyFile) {
         $AssemblyOriginatorKeyFile = Resolve-Path $AssemblyOriginatorKeyFile
     }
+
+    Write-Column "Name", "Value"
+    Write-Row "DateTime", $dateTime
+    Write-Row "SolutionPath", $SolutionPath
+    Write-Row "WorkingPath", $WorkingPath
+    $PropsPath | ForEach-Object {
+        Write-Row "PropsPath", $_
+    }
+    Write-Row "KeyPath", $AssemblyOriginatorKeyFile
+    Write-Row "OmitSign", $OmitSign
+    Write-Row "Force", $Force
+    Write-Log ""
 
     Write-Host "SolutionPath: $SolutionPath"
     Write-Host "WorkingPath: $WorkingPath"
@@ -216,10 +282,15 @@ try {
     Write-Host ""
     
     # validate to build with netcoreapp3.1 or net45
+    Write-Header "Framework Option"
     Assert-NETCore -Version "3.1"
     if (!(Test-NET45 -SolutionPath $SolutionPath)) {
         $frameworkOption = "--framework netcoreapp3.1"
+        Write-Log $frameworkOption
+    } else {
+        Write-Log "all"
     }
+    Write-Log ""
 
     # check if there are any changes in the repository.
     Assert-Changes -WorkingPath $WorkingPath -Force:$Force
@@ -237,14 +308,19 @@ try {
     }
  
     # build project
+    Write-Header "Build"
     Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption
+    Write-Log ""
+
+    # record build result
+    Write-Header "Result"
     if ($LastExitCode -eq 0) {
-        Write-Host ""
-        Write-Host "build completed."
-        Write-Host ""
+        Write-Log "$(Get-Date)"
+        Write-Log "build completed."
+        Write-Log ""
     }
     else {
-        Write-Error "build failed"
+        Write-Log "build failed" -IsError
     }
 }
 finally {
