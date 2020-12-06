@@ -13,6 +13,7 @@ param(
     [string]$LogPath = "",
     [switch]$OmitSign,
     [switch]$IsPrivate,
+    [switch]$IsPack,
     [switch]$Force
 )
 
@@ -199,9 +200,14 @@ function Initialize-Sign {
 function Invoke-Build {
     param(
         [string]$SolutionPath,
-        [string]$FrameworkOption
+        [string]$FrameworkOption,
+        [switch]$IsPack
     )
-    $expression = "dotnet build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release"
+    $build = "build"
+    if ($IsPack) {
+        $build = "pack"
+    }
+    $expression = "dotnet $build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
         Write-Log $_
     }
@@ -352,7 +358,7 @@ try {
     # build project
     Write-Header "Build"
     Start-Log
-    Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption
+    Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption -IsPack:$IsPack
     Stop-Log
     Write-Log
 
