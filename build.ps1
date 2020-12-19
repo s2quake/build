@@ -11,9 +11,9 @@ param(
     [string[]]$PropsPath,
     [string]$KeyPath = "",
     [string]$LogPath = "",
-    [switch]$OmitSign,
-    [switch]$IsPrivate,
-    [switch]$IsPack,
+    [ValidateSet('build', 'publish', 'pack')]
+    [string]$Task = "build",
+    [switch]$Sign,
     [switch]$Force
 )
 
@@ -180,29 +180,20 @@ function Initialize-Sign {
     param (
         [string]$ProjectPath,
         [string]$KeyPath,
-        [switch]$OmitSign,
-        [switch]$IsPrivate
+        [switch]$Sign
     )
     [xml]$doc = Get-Content $ProjectPath -Encoding UTF8
     $propertyGroupNode = $doc.CreateElement("PropertyGroup", $doc.DocumentElement.NamespaceURI)
+    $delaySign = ("" -ne $KeyPath) -and ($false -eq $Sign);
+    $signAssembly = $Sign;
 
     $node = $doc.CreateElement("DelaySign", $doc.DocumentElement.NamespaceURI)
-    if ($IsPrivate) {
-        $text = $doc.CreateTextNode("false")
-    }
-    else {
-        $text = $doc.CreateTextNode("true")
-    }
+    $text = $doc.CreateTextNode($delaySign ? "true" : "false")
     $node.AppendChild($text) | Out-Null
         
     $propertyGroupNode.AppendChild($node) | Out-Null
     $node = $doc.CreateElement("SignAssembly", $doc.DocumentElement.NamespaceURI)
-    if ($OmitSign) {
-        $text = $doc.CreateTextNode("false")
-    }
-    else {
-        $text = $doc.CreateTextNode("true")
-    }
+    $text = $doc.CreateTextNode($signAssembly ? "true" : "false")
     $node.AppendChild($text) | Out-Null
     $propertyGroupNode.AppendChild($node) | Out-Null
 
@@ -216,8 +207,8 @@ function Initialize-Sign {
     $doc.Project.AppendChild($propertyGroupNode) | Out-Null
     $doc.Save($ProjectPath)
 
-    Write-Property "DelaySign" "$(!$IsPrivate)"
-    Write-Property "SignAssembly" "$(!$OmitSign)"
+    Write-Property "DelaySign" "$($delaySign)"
+    Write-Property "SignAssembly" "$($signAssembly)"
     Write-Property "AssemblyOriginatorKeyFile" $KeyPath
 }
 
@@ -225,15 +216,16 @@ function Invoke-Build {
     param(
         [string]$SolutionPath,
         [string]$FrameworkOption,
-        [switch]$IsPack
+        [ValidateSet('build', 'publish', 'pack')]
+        [string]$Task = "build"
     )
-    $build = "build"
-    if ($IsPack) {
-        $build = "pack"
-    }
-    $expression = "dotnet $build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release"
+    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo --configuration Release"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
-        Write-Log $_
+        if ($_ -match "CSC : warning CS\d+:") {
+            Write-Log $_ -LogType Warning
+        } else {
+            Write-Log $_
+        }
     }
 }
 
@@ -243,7 +235,8 @@ function Resolve-Solution {
     )
     if ([environment]::OSVersion.Platform -eq "Win32NT") {
         Write-Log "there is no problems to resolve."
-    } else {
+    }
+    else {
         $projectPaths = Get-ProjectPaths $SolutionPath
         $projectPaths | ForEach-Object {
             $projectType = Get-ProjectType $_
@@ -320,8 +313,8 @@ function Write-Column {
         [string[]]$Columns
     )
     $items = ($Columns | ForEach-Object { "".PadRight($_.Length, '-') }) -join " | "
-    $title = "| $($Columns -join " | ") |"
-    $separator = "| $($items) |"
+    $title = " | $($Columns -join " | ") | "
+    $separator = " | $($items) | "
     Add-Content -Path $LogPath -Value $title, $separator
 }
 
@@ -332,12 +325,12 @@ function Write-Property {
     )
     if ($Values.Length -eq 1) {
         Write-Host "$($Name): $($Values[0])"
-        Add-Content -Path $LogPath -Value "| $Name | $($Values[0]) |"
+        Add-Content -Path $LogPath -Value " | $Name | $($Values[0]) | "
     }
     else {
         Write-Host "$($Name):"
         $Values | ForEach-Object { Write-Host "    $_" }
-        Add-Content -Path $LogPath -Value "| $Name | $($Values -join "<br>") |"
+        Add-Content -Path $LogPath -Value " | $Name | $($Values -join "<br>") | "
     }
 }
 
@@ -361,7 +354,12 @@ try {
     $SolutionPath = Resolve-Path $SolutionPath
     $WorkingPath = Split-Path $SolutionPath
     $PropsPath = Resolve-Path $PropsPath
-    if ("" -ne $KeyPath) {
+    if ("" -eq $KeyPath) {
+        if ($Sign -eq $true) {
+            throw "Unable to sign because the key path does not exist.";
+        }
+    }
+    else {
         $KeyPath = Resolve-Path $KeyPath
     }
 
@@ -407,7 +405,7 @@ try {
     $PropsPath | ForEach-Object {
         Write-Column "Name", "Value"
         Initialize-Version $_ $frameworks
-        Initialize-Sign -ProjectPath $_ -KeyPath $KeyPath -OmitSign:$OmitSign -IsPrivate:$IsPrivate
+        Initialize-Sign -ProjectPath $_ -KeyPath $KeyPath -Sign:$Sign
         Write-Log
     }
 
@@ -421,7 +419,7 @@ try {
     # build project
     Write-Header "Build"
     Start-Log
-    Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption -IsPack:$IsPack
+    Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption -Task $Task
     Stop-Log
     Write-Log
 
