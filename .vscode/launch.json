@@ -8,11 +8,8 @@
             "name": "PowerShell: Launch Current File",
             "type": "PowerShell",
             "request": "launch",
-            "script": "${cwd}/build.ps1",
-            "args": [
-                "../communication/communication.sln",
-                "../communication/JSSoft.Library/Directory.Build.props, ../communication/JSSoft.Library.Commands/Directory.Build.props, ../communication/JSSoft.Communication/Directory.Build.props"
-            ],
+            "script": "${cwd}/build-sample.ps1",
+            "args": [],
             "cwd": "${cwd}"
         }
     ]

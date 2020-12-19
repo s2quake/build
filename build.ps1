@@ -127,6 +127,30 @@ function Get-Revision {
     }
 }
 
+function Get-ProjectPaths {
+    param(
+        [string]$SolutionPath
+    )
+    $items = Invoke-Expression "dotnet sln `"$SolutionPath`" list"
+    $directory = Split-Path $SolutionPath
+    $items | ForEach-Object {
+        if ($null -ne $_) {
+            $path = Join-Path $directory $_
+            if (Test-Path $path) {
+                $path
+            }
+        }
+    }
+}
+
+function Get-ProjectType {
+    param(
+        [string]$ProjectPath
+    )
+    [xml]$doc = Get-Content $ProjectPath -Encoding UTF8
+    $doc.Project.Sdk
+}
+
 function Initialize-Version {
     param (
         [string]$ProjectPath,
@@ -210,6 +234,24 @@ function Invoke-Build {
     $expression = "dotnet $build `"$SolutionPath`" $FrameworkOption --verbosity minimal --nologo --configuration Release"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
         Write-Log $_
+    }
+}
+
+function Resolve-Solution {
+    param(
+        [string]$SolutionPath
+    )
+    if ([environment]::OSVersion.Platform -eq "Win32NT") {
+        Write-Log "there is no problems to resolve."
+    } else {
+        $projectPaths = Get-ProjectPaths $SolutionPath
+        $projectPaths | ForEach-Object {
+            $projectType = Get-ProjectType $_
+            if ($projectType -eq "Microsoft.NET.Sdk.WindowsDesktop") {
+                Invoke-Expression "dotnet sln `"$SolutionPath`" remove `"$_`""
+                Write-Log "Exclude `"$_`"" -LogType "Warning"
+            }
+        }
     }
 }
 
@@ -324,7 +366,7 @@ try {
     Assert-NETCore -Version "3.1"
     if (!(Test-NET45 -SolutionPath $SolutionPath)) {
         $frameworkOption = "--framework netcoreapp3.1"
-        $frameworks = ,"netcoreapp3.1"
+        $frameworks = , "netcoreapp3.1"
         Write-Log "netcoreapp3.1"
     }
     else {
@@ -354,6 +396,13 @@ try {
         Initialize-Sign -ProjectPath $_ -KeyPath $KeyPath -OmitSign:$OmitSign -IsPrivate:$IsPrivate
         Write-Log
     }
+
+    # resolve solution
+    Write-Header "Resolve Solution"
+    Start-Log 
+    Resolve-Solution $SolutionPath
+    Stop-Log
+    Write-Log
  
     # build project
     Write-Header "Build"

@@ -1,0 +1,3 @@
+[submodule "font-generator"]
+	path = font-generator
+	url = https://github.com/s2quake/font-generator.git
