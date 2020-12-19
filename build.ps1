@@ -269,6 +269,20 @@ function Restore-ProjectPath {
     }
 }
 
+function Restore-SolutionPath {
+    param(
+        [string]$SolutionPath
+    )
+    $location = Get-Location
+    try {
+        Set-Location (Split-Path $SolutionPath)
+        Invoke-Expression "git checkout `"$SolutionPath`"" 2>&1
+    }
+    finally {
+        Set-Location $location        
+    }
+}
+
 function Write-Header {
     param(
         [string]$Header,
@@ -436,6 +450,7 @@ finally {
         $PropsPath | ForEach-Object {
             Restore-ProjectPath $_
         }
+        Restore-SolutionPath $SolutionPath
     }
     Set-Location $location
 }
