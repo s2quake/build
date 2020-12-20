@@ -211,7 +211,7 @@ function Initialize-Sign {
     )
     [xml]$doc = Get-Content $ProjectPath -Encoding UTF8
     $propertyGroupNode = $doc.CreateElement("PropertyGroup", $doc.DocumentElement.NamespaceURI)
-    $delaySign = ("" -ne $KeyPath) -and ($false -eq $Sign);
+    $delaySign = ("" -eq $KeyPath) -and ($true -eq $Sign);
     $signAssembly = $Sign;
 
     $node = $doc.CreateElement("DelaySign", $doc.DocumentElement.NamespaceURI)
