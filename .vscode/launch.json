@@ -11,7 +11,7 @@
             "script": "${cwd}/build-sample.ps1",
             "args": [
                 "-LogPath", "logs\\log.md",
-                "-Force"
+                "-Sign"
             ],
             "cwd": "${cwd}"
         }

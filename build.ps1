@@ -549,12 +549,7 @@ try {
     $frameworks = "netcoreapp3.1", "net45"
     $WorkingPath = Split-Path $SolutionPath
     $PropPaths = Resolve-Path $PropPaths
-    if ("" -eq $KeyPath) {
-        if ($Sign -eq $true) {
-            throw "Unable to sign because the key path does not exist.";
-        }
-    }
-    else {
+    if ("" -ne $KeyPath) {
         $KeyPath = Resolve-Path $KeyPath
     }
 
