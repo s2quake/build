@@ -143,6 +143,35 @@ function Get-ProjectPaths {
     }
 }
 
+function Get-RepositoryPaths {
+    param(
+        [string]$SolutionPath
+    )
+    $location = Get-Location
+    try {
+        $repositoryPath = Split-Path $SolutionPath
+        $items = @( $repositoryPath )
+        Set-Location $repositoryPath
+        Invoke-Expression "git submodule foreach --recursive -q pwd" | ForEach-Object {
+            $items = $items + $_
+        }
+        return $items
+    }
+    finally {
+        Set-Location $location        
+    }
+}
+
+function Save-Repositories {
+    param (
+        [string]$SolutionPath
+    )
+    $items = Get-RepositoryPaths $SolutionPath
+
+    $items | Sort-Object -Descending
+    
+}
+
 function Get-ProjectType {
     param(
         [string]$ProjectPath
@@ -307,7 +336,7 @@ function Write-Log {
     Add-Content -Path $LogPath -Value $Text
 }
 
-function Start-Log{
+function Start-Log {
     Add-Content -Path $LogPath -Value "``````plain"
 }
 
@@ -341,6 +370,9 @@ function Write-Property {
     }
 }
 
+Save-Repositories $SolutionPath
+
+return;
 $dateTime = Get-Date
 if ($LogPath -eq "") {
     $dateTimeText = $dateTime.ToString("yyyy-MM-dd_hh-mm-ss")
