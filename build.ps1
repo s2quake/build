@@ -9,10 +9,10 @@ param(
     [string]$SolutionPath,
     [Parameter(Mandatory = $true)]
     [string[]]$PropsPath,
-    [string]$KeyPath = "",
-    [string]$LogPath = "",
     [ValidateSet('build', 'publish', 'pack')]
     [string]$Task = "build",
+    [string]$KeyPath = "",
+    [string]$LogPath = "",
     [switch]$Sign,
     [switch]$Force
 )
@@ -221,9 +221,15 @@ function Invoke-Build {
     )
     $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo --configuration Release"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
-        if ($_ -match "CSC : warning CS\d+:") {
-            Write-Log $_ -LogType Warning
-        } else {
+        if ($_ -match "(.+): (warning CS\d+): (.+)") {
+            Write-Log "## $($Matches[2])`n`n$($Matches[1])`n`n    $($Matches[3])" -LogType "Warning"
+            Write-Log
+        }
+        elseif ($_ -match "(.+): (error CS\d+): (.+)") {
+            Write-Log "## $($Matches[2])`n`n$($Matches[1])`n`n    $($Matches[3])" -LogType "Error"
+            Write-Log
+        }
+        else {
             Write-Log $_
         }
     }
@@ -242,7 +248,8 @@ function Resolve-Solution {
             $projectType = Get-ProjectType $_
             if ($projectType -eq "Microsoft.NET.Sdk.WindowsDesktop") {
                 Invoke-Expression "dotnet sln `"$SolutionPath`" remove `"$_`""
-                Write-Log "Exclude `"$_`"" -LogType "Warning"
+                Write-Log "The project cannot be built on the current platform.`n`n    $_" -LogType "Warning"
+                Write-Log
             }
         }
     }
@@ -300,7 +307,7 @@ function Write-Log {
     Add-Content -Path $LogPath -Value $Text
 }
 
-function Start-Log {
+function Start-Log{
     Add-Content -Path $LogPath -Value "``````plain"
 }
 
@@ -336,7 +343,7 @@ function Write-Property {
 
 $dateTime = Get-Date
 if ($LogPath -eq "") {
-    $dateTimeText = $dateTime.ToString("yyyy-MM-HH-mm-ss")
+    $dateTimeText = $dateTime.ToString("yyyy-MM-dd_hh-mm-ss")
     $logDirectory = Join-Path (Get-Location) "logs"
     if (!(Test-Path $logDirectory)) {
         New-Item $logDirectory -ItemType Directory
@@ -411,16 +418,12 @@ try {
 
     # resolve solution
     Write-Header "Resolve Solution"
-    Start-Log 
     Resolve-Solution $SolutionPath
-    Stop-Log
     Write-Log
  
     # build project
     Write-Header "Build"
-    Start-Log
     Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption -Task $Task
-    Stop-Log
     Write-Log
 
     # record build result
