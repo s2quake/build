@@ -8,7 +8,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SolutionPath,
     [Parameter(Mandatory = $true)]
-    [string[]]$PropsPath,
+    [string[]]$PropPaths,
     [ValidateSet('build', 'publish', 'pack')]
     [string]$Task = "build",
     [string]$KeyPath = "",
@@ -155,23 +155,6 @@ function Test-Stash {
     return $false
 }
 
-function Save-Repositories {
-    param (
-        [string]$SolutionPath,
-        [guid]$Token,
-        [switch]$Force
-    )
-    $items = Get-RepositoryPaths $SolutionPath
-    if ($Force) {
-        $items | Sort-Object -Descending | ForEach-Object {
-            Invoke-Expression "git -C `"$_`" stash save -q --message `"$Token`""
-            if (Test-Stash $_ $Token) {
-                Invoke-Expression "git -C `"$_`" stash apply -q"
-            }
-        }
-    }
-}
-
 function Restore-Repositories {
     param (
         [string]$SolutionPath,
@@ -299,7 +282,23 @@ function Step-RepositoryChanges {
         }
     }
     finally {
-        Write-Log
+    }
+}
+
+function Step-SaveRepositories {
+    param (
+        [string]$SolutionPath,
+        [guid]$Token,
+        [switch]$Force
+    )
+    $items = Get-RepositoryPaths $SolutionPath
+    if ($Force) {
+        $items | Sort-Object -Descending | ForEach-Object {
+            Invoke-Expression "git -C `"$_`" stash save -q --message `"$Token`""
+            if (Test-Stash $_ $Token) {
+                Invoke-Expression "git -C `"$_`" stash apply -q"
+            }
+        }
     }
 }
 
@@ -360,7 +359,22 @@ function Step-Build {
     Stop-Log
 }
 
-function Resolve-Solution {
+function Step-ResolveProp {
+    param(
+        [string[]]$PropPaths,
+        [string[]]$Frameworks,
+        [string]$KeyPath,
+        [switch]$Sign
+    )
+    $PropPaths | ForEach-Object {
+        Write-Column "Name", "Value"
+        Initialize-Version $_ $Frameworks
+        Initialize-Sign -ProjectPath $_ -KeyPath $KeyPath -Sign:$Sign
+        Write-Log
+    }
+}
+
+function Step-ResolveSolution {
     param(
         [string]$SolutionPath
     )
@@ -375,11 +389,33 @@ function Resolve-Solution {
             $projectType = Get-ProjectType $_
             if ($projectType -eq "Microsoft.NET.Sdk.WindowsDesktop") {
                 Invoke-Expression "dotnet sln `"$SolutionPath`" remove `"$_`""
-                Write-Log "The project cannot be built on the current platform.`n`n    $_" -LogType "Warning"
+                Write-Log $_ -LogType "Warning" -Label "The project cannot be built on the current platform."
                 Write-Log
             }
         }
     }
+}
+
+function Step-Result {
+    param(
+        [datetime]$DateTime
+    )
+    Start-Log
+    if ($LastExitCode -eq 0) {
+        $lastTime = Get-Date
+        $timeSpan = $lastTime - $DateTime
+        Write-Log "Start Time  : $($DateTime.ToString())"
+        Write-Log "End Time    : $($lastTime.ToString())"
+        Write-Log "Elapsed time: $timeSpan"
+        Write-Log "build completed."
+    }
+    else {
+        Write-Log "build failed" -LogType "Error"
+    }
+    Write-Host
+    Write-Host "LogPath: $LogPath"
+    Write-Host
+    Stop-Log
 }
 
 function Restore-ProjectPath {
@@ -512,7 +548,7 @@ try {
     $frameworkOption = ""
     $frameworks = "netcoreapp3.1", "net45"
     $WorkingPath = Split-Path $SolutionPath
-    $PropsPath = Resolve-Path $PropsPath
+    $PropPaths = Resolve-Path $PropPaths
     if ("" -eq $KeyPath) {
         if ($Sign -eq $true) {
             throw "Unable to sign because the key path does not exist.";
@@ -526,7 +562,7 @@ try {
     Write-Property "DateTime" $dateTime.ToString()
     Write-Property "SolutionPath" $SolutionPath
     Write-Property "WorkingPath" $WorkingPath
-    Write-Property "PropsPath" $PropsPath
+    Write-Property "PropPaths" $PropPaths
     Write-Property "KeyPath" $KeyPath
     Write-Property "OmitSign" $OmitSign
     Write-Property "Force" $Force
@@ -550,20 +586,21 @@ try {
     # check if there are any changes in the repository.
     Write-Header "Repository changes"
     Step-RepositoryChanges $repositoryPaths -Force:$Force
-    Save-Repositories $SolutionPath $token -Force:$Force
+    Write-Log
+
+    # save repositories if there is any changes.
+    Write-Header "Save repositories"
+    Step-SaveRepositories $SolutionPath $token -Force:$Force
+    Write-Log
 
     # recored version and keypath to props file
     Write-Header "Set Information to props files"
-    $PropsPath | ForEach-Object {
-        Write-Column "Name", "Value"
-        Initialize-Version $_ $frameworks
-        Initialize-Sign -ProjectPath $_ -KeyPath $KeyPath -Sign:$Sign
-        Write-Log
-    }
+    Step-ResolveProp $PropPaths -Frameworks $frameworks -KeyPath $KeyPath -Sign:$Sign
+    Write-Log
 
     # resolve solution
     Write-Header "Resolve Solution"
-    Resolve-Solution $SolutionPath
+    Step-ResolveSolution $SolutionPath
     Write-Log
  
     # build project
@@ -573,22 +610,8 @@ try {
 
     # record build result
     Write-Header "Result"
-    Start-Log
-    if ($LastExitCode -eq 0) {
-        $lastTime = Get-Date
-        $timeSpan = $lastTime - $dateTime
-        Write-Log "Start Time  : $($dateTime.ToString())"
-        Write-Log "End Time    : $($lastTime.ToString())"
-        Write-Log "Elapsed time: $timeSpan"
-        Write-Log "build completed."
-    }
-    else {
-        Write-Log "build failed" -LogType "Error"
-    }
-    Write-Host
-    Write-Host "LogPath: $LogPath"
-    Write-Host
-    Stop-Log
+    Step-Result -DateTime $dateTime
+    Write-Log
 }
 finally {
     Restore-Repositories $SolutionPath $token -Force:$Force
