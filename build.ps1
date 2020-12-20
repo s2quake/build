@@ -312,42 +312,26 @@ function Step-Build {
     [string[]]$resultItems = $()
     $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo --configuration Release"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
-        $pattern = "^(?:\s+\d+\>)?([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.*)$"
-        if ($_ -match $pattern) {
-            $path = $Matches[1]
-            $location = $Matches[2]
-            $type = $Matches[3]
-            $typeValue = $Matches[4]
-            $message = $Matches[5]
-            switch ($type) {
-                "error" {
-                    Write-Error $_ 
-                    Write-Column "Name", "Value"
-                    Write-Property "Error" "<span style=`"color:red`">$typeValue</span>"
-                    Write-Property "Path" $path
-                    Write-Property "Location" $location
-                    Write-Property "Message" $message
-                    Write-Log "_________________"
-                }
-                "warning" {
-                    Write-Warning $_ 
-                    Write-Column "Name", "Value"
-                    Write-Property "Warning" "<span style=`"color:yellow`">$typeValue</span>"
-                    Write-Property "Path" $path
-                    Write-Property "Location" $location
-                    Write-Property "Message" $message
-                    Write-Log "_________________"
-                }
-                "info" {
-                    Write-Information $_ 
-                    Write-Column "Name", "Value"
-                    Write-Property "Information" $typeValue
-                    Write-Property "Path" $path
-                    Write-Property "Location" $location
-                    Write-Property "Message" $message
-                    Write-Log "_________________"
-                }
-            }
+        $pattern1 = "^(?:\s+\d+\>)?([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
+        $pattern2 = "^(.+)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
+        if ($_ -match $pattern1) {
+            $values = @{};
+            $values["Path"] = $Matches[1]
+            $values["Location"] = $Matches[2]
+            $values["Type"] = $Matches[3]
+            $values["TypeValue"] = $Matches[4]
+            $values["Message"] = $Matches[5]
+            $values["Project"] = $Matches[6]
+            Write-BuildError $values
+        }
+        elseif ($_ -match $pattern2) {
+            $values = @{};
+            $values["Path"] = $Matches[1]
+            $values["Type"] = $Matches[2]
+            $values["TypeValue"] = $Matches[3]
+            $values["Message"] = $Matches[4]
+            $values["Project"] = $Matches[5]
+            Write-BuildError $values
         }
         else {
             $resultItems += $_
@@ -523,6 +507,39 @@ function Write-Property {
         $Values | ForEach-Object { Write-Host "    $_" }
         Add-Content -Path $LogPath -Value "| $Name | $($Values -join "<br>") |"
     }
+}
+
+function Write-BuildError {
+    param(
+        [hashtable]$Table
+    )
+
+    $path = $Table["Path"];
+    $location = $Table["Location"];
+    $type = $Table["Type"];
+    $typeValue = $Table["TypeValue"];
+    $message = $Table["Message"];
+    $project = $Table["Project"];
+
+    Write-Column "Name", "Value"
+    switch ($type) {
+        "error" {
+            Write-Property "Error" "<span style=`"color:red`">$typeValue</span>"
+        }
+        "warning" {
+            Write-Property "Warning" "<span style=`"color:yellow`">$typeValue</span>"
+        }
+        "info" {
+            Write-Property "Information" $typeValue
+        }
+    }
+    Write-Property "Path" $path
+    if ($location) {
+        Write-Property "Location" $location
+    }
+    Write-Property "Message" $message
+    Write-Property "Project" $project
+    Write-Log "_________________"
 }
 
 $token = New-Guid
