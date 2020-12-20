@@ -215,7 +215,7 @@ function Initialize-Sign {
     $signAssembly = $Sign;
 
     $node = $doc.CreateElement("DelaySign", $doc.DocumentElement.NamespaceURI)
-    if ($tru -eq $delaySign) {
+    if ($true -eq $delaySign) {
         $text = $doc.CreateTextNode("true")
     } 
     else {
