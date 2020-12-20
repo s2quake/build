@@ -72,7 +72,7 @@ function Test-NET45 {
 
 function Get-RepositoryChanges {
     [OutputType([string[]])]
-    param (
+    param(
         [string]$RepositoryPath
     )
     return Invoke-Expression "git -C `"$RepositoryPath`" status --porcelain"
@@ -142,7 +142,7 @@ function Get-RepositoryPaths {
 }
 
 function Test-Stash {
-    param (
+    param(
         [string]$RepositoryPath,
         [guid]$Token
     )
@@ -156,7 +156,7 @@ function Test-Stash {
 }
 
 function Restore-Repositories {
-    param (
+    param(
         [string]$SolutionPath,
         [guid]$Token,
         [switch]$Force
@@ -179,7 +179,7 @@ function Get-ProjectType {
 }
 
 function Initialize-Version {
-    param (
+    param(
         [string]$ProjectPath,
         [string[]]$Frameworks
     )
@@ -204,7 +204,7 @@ function Initialize-Version {
 }
 
 function Initialize-Sign {
-    param (
+    param(
         [string]$ProjectPath,
         [string]$KeyPath,
         [switch]$Sign
@@ -286,7 +286,7 @@ function Step-RepositoryChanges {
 }
 
 function Step-SaveRepositories {
-    param (
+    param(
         [string]$SolutionPath,
         [guid]$Token,
         [switch]$Force
@@ -322,7 +322,7 @@ function Step-Build {
             $values["TypeValue"] = $Matches[4]
             $values["Message"] = $Matches[5]
             $values["Project"] = $Matches[6]
-            Write-BuildError $values
+            Write-BuildError $values $_
         }
         elseif ($_ -match $pattern2) {
             $values = @{};
@@ -331,7 +331,7 @@ function Step-Build {
             $values["TypeValue"] = $Matches[3]
             $values["Message"] = $Matches[4]
             $values["Project"] = $Matches[5]
-            Write-BuildError $values
+            Write-BuildError $values $_
         }
         else {
             $resultItems += $_
@@ -496,22 +496,28 @@ function Write-Column {
 function Write-Property {
     param(
         [string]$Name,
-        [string[]]$Values
+        [string[]]$Values,
+        [switch]$OmitLog
     )
     if ($Values.Length -eq 1) {
-        Write-Host "$($Name): $($Values[0])"
+        if (!$OmitLog) {
+            Write-Host "$($Name): $($Values[0])"
+        }
         Add-Content -Path $LogPath -Value "| $Name | $($Values[0]) |"
     }
     else {
-        Write-Host "$($Name):"
-        $Values | ForEach-Object { Write-Host "    $_" }
+        if (!$OmitLog) {
+            Write-Host "$($Name):"
+            $Values | ForEach-Object { Write-Host "    $_" }
+        }
         Add-Content -Path $LogPath -Value "| $Name | $($Values -join "<br>") |"
     }
 }
 
 function Write-BuildError {
     param(
-        [hashtable]$Table
+        [hashtable]$Table,
+        [string]$FullText
     )
 
     $path = $Table["Path"];
@@ -524,21 +530,24 @@ function Write-BuildError {
     Write-Column "Name", "Value"
     switch ($type) {
         "error" {
-            Write-Property "Error" "<span style=`"color:red`">$typeValue</span>"
+            Write-Error -Message $FullText
+            Write-Property "Error" "<span style=`"color:red`">$typeValue</span>" -OmitLog
         }
         "warning" {
-            Write-Property "Warning" "<span style=`"color:yellow`">$typeValue</span>"
+            Write-Warning -Message $FullText
+            Write-Property "Warning" "<span style=`"color:yellow`">$typeValue</span>" -OmitLog
         }
         "info" {
+            Write-Information -MessageData $FullText
             Write-Property "Information" $typeValue
         }
     }
-    Write-Property "Path" $path
+    Write-Property "Path" $path -OmitLog
     if ($location) {
-        Write-Property "Location" $location
+        Write-Property "Location" $location -OmitLog
     }
-    Write-Property "Message" $message
-    Write-Property "Project" $project
+    Write-Property "Message" $message -OmitLog
+    Write-Property "Project" $project -OmitLog
     Write-Log "_________________"
 }
 
