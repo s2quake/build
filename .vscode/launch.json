@@ -9,7 +9,10 @@
             "type": "PowerShell",
             "request": "launch",
             "script": "${cwd}/build-sample.ps1",
-            "args": [],
+            "args": [
+                "-LogPath", "logs\\log.md",
+                "-Force"
+            ],
             "cwd": "${cwd}"
         }
     ]

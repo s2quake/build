@@ -70,32 +70,12 @@ function Test-NET45 {
     }
 }
 
-function Assert-Changes {
+function Get-RepositoryChanges {
+    [OutputType([string[]])]
     param (
-        [string]$WorkingPath,
-        [switch]$Force
+        [string]$RepositoryPath
     )
-    $location = Get-Location
-    try {
-        Set-Location $WorkingPath
-        $changes = Invoke-Expression "git status --porcelain"
-        if ($changes) {
-            throw $changes
-        }
-    }
-    catch {
-        if ($Force -eq $false) {
-            Write-Log "WorkingPath: $WorkingPath" -LogType "Error"
-            Write-Log
-            Write-Log $_.Exception.Message -LogType "Error"
-            Write-Log
-            Write-Log "git repository has changes. build aborted." -LogType "Error"
-            exit 1
-        }
-    }
-    finally {
-        Set-Location $location
-    }
+    return Invoke-Expression "git -C `"$RepositoryPath`" status --porcelain"
 }
 
 function Get-Revision {
@@ -147,29 +127,64 @@ function Get-RepositoryPaths {
     param(
         [string]$SolutionPath
     )
-    $location = Get-Location
-    try {
-        $repositoryPath = Split-Path $SolutionPath
-        $items = @( $repositoryPath )
-        Set-Location $repositoryPath
-        Invoke-Expression "git submodule foreach --recursive -q pwd" | ForEach-Object {
-            $items = $items + $_
+    $platform = [environment]::OSVersion.Platform
+    $repositoryPath = Split-Path $SolutionPath
+    $items = @( $repositoryPath )
+    Invoke-Expression "git -C `"$repositoryPath`" submodule foreach --recursive -q pwd" | ForEach-Object {
+        $item = $_
+        if ($platform -eq "Win32NT") {
+            $item = $_ -replace "/(\w)(/.+)", "`$1:`$2"
+            $item = $item -replace "/", "\"
         }
-        return $items
+        $items = $items + $item
     }
-    finally {
-        Set-Location $location        
+    return $items
+}
+
+function Test-Stash {
+    param (
+        [string]$RepositoryPath,
+        [guid]$Token
+    )
+    [array]$items = Invoke-Expression "git -C `"$RepositoryPath`" stash list"
+    if (($items -is [array]) -and ($items.Length)) {
+        if ($items[0] -match ".+$Token`$") {
+            return $true
+        }
     }
+    return $false
 }
 
 function Save-Repositories {
     param (
-        [string]$SolutionPath
+        [string]$SolutionPath,
+        [guid]$Token,
+        [switch]$Force
     )
     $items = Get-RepositoryPaths $SolutionPath
+    if ($Force) {
+        $items | Sort-Object -Descending | ForEach-Object {
+            Invoke-Expression "git -C `"$_`" stash save -q --message `"$Token`""
+            if (Test-Stash $_ $Token) {
+                Invoke-Expression "git -C `"$_`" stash apply -q"
+            }
+        }
+    }
+}
 
-    $items | Sort-Object -Descending
-    
+function Restore-Repositories {
+    param (
+        [string]$SolutionPath,
+        [guid]$Token,
+        [switch]$Force
+    )
+    $items = Get-RepositoryPaths $SolutionPath
+    $items | ForEach-Object {
+        Invoke-Expression "git -C `"$_`" reset --hard -q"
+        if ($Force -and (Test-Stash $_ $Token)) {
+            Invoke-Expression "git -C `"$_`" stash pop -q"
+        }
+    }
 }
 
 function Get-ProjectType {
@@ -217,12 +232,22 @@ function Initialize-Sign {
     $signAssembly = $Sign;
 
     $node = $doc.CreateElement("DelaySign", $doc.DocumentElement.NamespaceURI)
-    $text = $doc.CreateTextNode($delaySign ? "true" : "false")
+    if ($tru -eq $delaySign) {
+        $text = $doc.CreateTextNode("true")
+    } 
+    else {
+        $text = $doc.CreateTextNode("false")
+    }
     $node.AppendChild($text) | Out-Null
         
     $propertyGroupNode.AppendChild($node) | Out-Null
     $node = $doc.CreateElement("SignAssembly", $doc.DocumentElement.NamespaceURI)
-    $text = $doc.CreateTextNode($signAssembly ? "true" : "false")
+    if ($true -eq $signAssembly) {
+        $text = $doc.CreateTextNode("true")
+    }
+    else {
+        $text = $doc.CreateTextNode("false")
+    }
     $node.AppendChild($text) | Out-Null
     $propertyGroupNode.AppendChild($node) | Out-Null
 
@@ -241,27 +266,98 @@ function Initialize-Sign {
     Write-Property "AssemblyOriginatorKeyFile" $KeyPath
 }
 
-function Invoke-Build {
+function Step-RepositoryChanges {
+    param(
+        [string[]]$RepositoryPaths,
+        [switch]$Force
+    )
+    try {
+        $logType = "Error"
+        if ($Force -eq $true) {
+            $logType = "Warning"
+        }
+        $changes = @{}
+        $RepositoryPaths | ForEach-Object {
+            $itemChanges = Get-RepositoryChanges -RepositoryPath $_
+            if ($itemChanges) {
+                $changes[$_] = $itemChanges
+            }
+        }
+        if ($changes.Count) {
+            $changes.Keys | ForEach-Object {
+                Write-Log $changes[$_] -Label $_ -LogType $logType
+            }
+            if ($Force -eq $false) {
+                Write-Log "git repository has changes. build aborted." -LogType "Error"
+                exit 1
+            }
+        }
+        else {
+            Start-Log
+            Write-Log "no changes."
+            Stop-Log
+        }
+    }
+    finally {
+        Write-Log
+    }
+}
+
+function Step-Build {
     param(
         [string]$SolutionPath,
         [string]$FrameworkOption,
         [ValidateSet('build', 'publish', 'pack')]
         [string]$Task = "build"
     )
+    [string[]]$resultItems = $()
     $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo --configuration Release"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
-        if ($_ -match "(.+): (warning CS\d+): (.+)") {
-            Write-Log "## $($Matches[2])`n`n$($Matches[1])`n`n    $($Matches[3])" -LogType "Warning"
-            Write-Log
-        }
-        elseif ($_ -match "(.+): (error CS\d+): (.+)") {
-            Write-Log "## $($Matches[2])`n`n$($Matches[1])`n`n    $($Matches[3])" -LogType "Error"
-            Write-Log
+        $pattern = "^(?:\s+\d+\>)?([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.*)$"
+        if ($_ -match $pattern) {
+            $path = $Matches[1]
+            $location = $Matches[2]
+            $type = $Matches[3]
+            $typeValue = $Matches[4]
+            $message = $Matches[5]
+            switch ($type) {
+                "error" {
+                    Write-Error $_ 
+                    Write-Column "Name", "Value"
+                    Write-Property "Error" "<span style=`"color:red`">$typeValue</span>"
+                    Write-Property "Path" $path
+                    Write-Property "Location" $location
+                    Write-Property "Message" $message
+                    Write-Log "_________________"
+                }
+                "warning" {
+                    Write-Warning $_ 
+                    Write-Column "Name", "Value"
+                    Write-Property "Warning" "<span style=`"color:yellow`">$typeValue</span>"
+                    Write-Property "Path" $path
+                    Write-Property "Location" $location
+                    Write-Property "Message" $message
+                    Write-Log "_________________"
+                }
+                "info" {
+                    Write-Information $_ 
+                    Write-Column "Name", "Value"
+                    Write-Property "Information" $typeValue
+                    Write-Property "Path" $path
+                    Write-Property "Location" $location
+                    Write-Property "Message" $message
+                    Write-Log "_________________"
+                }
+            }
         }
         else {
-            Write-Log $_
+            $resultItems += $_
         }
     }
+
+    Start-Log
+    Write-Log $resultItems
+    Stop-Log
 }
 
 function Resolve-Solution {
@@ -269,7 +365,9 @@ function Resolve-Solution {
         [string]$SolutionPath
     )
     if ([environment]::OSVersion.Platform -eq "Win32NT") {
+        Start-Log
         Write-Log "there is no problems to resolve."
+        Stop-Log
     }
     else {
         $projectPaths = Get-ProjectPaths $SolutionPath
@@ -324,16 +422,37 @@ function Write-Header {
 
 function Write-Log {
     param(
-        [string]$Text = "",
+        [object]$Message = "",
         [ValidateSet('Output', 'Error', 'Warning')]
-        [string]$LogType = "Output"
+        [string]$LogType = "Output",
+        [string]$Label = ""
     )
-    switch ($LogType) {
-        "Output" { Write-Host $Text }
-        "Error" { Write-Error $Text }
-        "Warning" { Write-Warning $Text }
+    $text = ""
+    if ($Message -is [array]) {
+        $text = $Message -join "`n"
     }
-    Add-Content -Path $LogPath -Value $Text
+    else {
+        $text = "$Message"
+    }
+    switch ($LogType) {
+        "Output" { Write-Host $text }
+        "Error" { Write-Error -Message $text }
+        "Warning" { Write-Warning -Message $text }
+    }
+    if ($Label -ne "") {
+        switch ($LogType) {
+            "Output" { Add-Content -Path $LogPath -Value $Label }
+            "Error" { Add-Content -Path $LogPath -Value "<span style=`"color:red`">$Label</span>" }
+            "Warning" { Add-Content -Path $LogPath -Value "<span style=`"color:yellow`">$Label</span>" }
+        }
+        Add-Content -Path $LogPath -Value ""
+        Add-Content -Path $LogPath -Value "``````plain"
+    }
+    Add-Content -Path $LogPath -Value $text
+    if ($Label -ne "") {
+        Add-Content -Path $LogPath -Value "``````"
+        Add-Content -Path $LogPath -Value ""
+    }
 }
 
 function Start-Log {
@@ -370,9 +489,11 @@ function Write-Property {
     }
 }
 
-Save-Repositories $SolutionPath
+$token = New-Guid
+$platform = $PSVersionTable.Platform
+$SolutionPath = Resolve-Path $SolutionPath
+$repositoryPaths = Get-RepositoryPaths $SolutionPath
 
-return;
 $dateTime = Get-Date
 if ($LogPath -eq "") {
     $dateTimeText = $dateTime.ToString("yyyy-MM-dd_hh-mm-ss")
@@ -390,7 +511,6 @@ try {
     
     $frameworkOption = ""
     $frameworks = "netcoreapp3.1", "net45"
-    $SolutionPath = Resolve-Path $SolutionPath
     $WorkingPath = Split-Path $SolutionPath
     $PropsPath = Resolve-Path $PropsPath
     if ("" -eq $KeyPath) {
@@ -429,15 +549,8 @@ try {
 
     # check if there are any changes in the repository.
     Write-Header "Repository changes"
-    Start-Log
-    Assert-Changes -WorkingPath $WorkingPath -Force:$Force
-    $PropsPath | ForEach-Object {
-        $directory = Split-Path $_
-        Assert-Changes -WorkingPath $directory -Force:$Force
-    }
-    Write-Log "no changes."
-    Stop-Log
-    Write-Log
+    Step-RepositoryChanges $repositoryPaths -Force:$Force
+    Save-Repositories $SolutionPath $token -Force:$Force
 
     # recored version and keypath to props file
     Write-Header "Set Information to props files"
@@ -455,7 +568,7 @@ try {
  
     # build project
     Write-Header "Build"
-    Invoke-Build -SolutionPath $SolutionPath -Framework $frameworkOption -Task $Task
+    Step-Build -SolutionPath $SolutionPath -Framework $frameworkOption -Task $Task
     Write-Log
 
     # record build result
@@ -478,12 +591,6 @@ try {
     Stop-Log
 }
 finally {
-    # revert props file
-    if ($Force -eq $false) {
-        $PropsPath | ForEach-Object {
-            Restore-ProjectPath $_
-        }
-        Restore-SolutionPath $SolutionPath
-    }
+    Restore-Repositories $SolutionPath $token -Force:$Force
     Set-Location $location
 }
