@@ -504,8 +504,8 @@ function Write-Column {
         [string[]]$Columns
     )
     $items = ($Columns | ForEach-Object { "".PadRight($_.Length, '-') }) -join " | "
-    $title = " | $($Columns -join " | ") | "
-    $separator = " | $($items) | "
+    $title = "| $($Columns -join " | ") |"
+    $separator = "| $($items) |"
     Add-Content -Path $LogPath -Value $title, $separator
 }
 
@@ -516,12 +516,12 @@ function Write-Property {
     )
     if ($Values.Length -eq 1) {
         Write-Host "$($Name): $($Values[0])"
-        Add-Content -Path $LogPath -Value " | $Name | $($Values[0]) | "
+        Add-Content -Path $LogPath -Value "| $Name | $($Values[0]) |"
     }
     else {
         Write-Host "$($Name):"
         $Values | ForEach-Object { Write-Host "    $_" }
-        Add-Content -Path $LogPath -Value " | $Name | $($Values -join "<br>") | "
+        Add-Content -Path $LogPath -Value "| $Name | $($Values -join "<br>") |"
     }
 }
 
