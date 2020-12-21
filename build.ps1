@@ -423,10 +423,7 @@ function Resolve-LogPath {
         }
         $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
     }
-    Set-Content $LogPath "" -Encoding UTF8
-    if ($LastExitCode -ne 0) {
-        exit $LastExitCode
-    }
+    Set-Content $LogPath "" -Encoding UTF8 -ErrorAction Stop
     return $LogPath
 }
 
