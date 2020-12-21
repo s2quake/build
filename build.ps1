@@ -13,6 +13,8 @@ param(
     [string]$Task = "build",
     [string]$KeyPath = "",
     [string]$LogPath = "",
+    [string]$Configuration = "Release",
+    [string]$Framework = "netcoreapp3.1",
     [switch]$Sign,
     [switch]$Force
 )
@@ -146,13 +148,13 @@ function Test-Stash {
         [string]$RepositoryPath,
         [guid]$Token
     )
+    $pattern = "^(stash@{\d+}):\s.+:\s($Token)`$";
     [array]$items = Invoke-Expression "git -C `"$RepositoryPath`" stash list"
     if (($items -is [array]) -and ($items.Length)) {
-        if ($items[0] -match ".+$Token`$") {
-            return $true
+        if ($items[0] -match $pattern) {
+            return $Matches[1];
         }
     }
-    return $false
 }
 
 function Restore-Repositories {
@@ -181,7 +183,7 @@ function Get-ProjectType {
 function Initialize-Version {
     param(
         [string]$ProjectPath,
-        [string[]]$Frameworks
+        [string]$Framework
     )
     try {
         $revision = Get-Revision $ProjectPath
@@ -190,12 +192,12 @@ function Initialize-Version {
             throw "there is no version"
         }
         $version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
-        $versions = $Frameworks | ForEach-Object { "$($doc.Project.PropertyGroup.FileVersion)-$_-$revision" }
+        $versionText = "$($doc.Project.PropertyGroup.FileVersion)-$Framework-$revision"
         $doc.Project.PropertyGroup.Version = $version
         $doc.Save($ProjectPath)
         
         Write-Property "Path" $ProjectPath
-        Write-Property "Version" $versions
+        Write-Property "Version" $versionText
     }
     catch {
         Write-Log $_.Exception.Message -LogType "Error"
@@ -295,8 +297,9 @@ function Step-SaveRepositories {
     if ($Force) {
         $items | Sort-Object -Descending | ForEach-Object {
             Invoke-Expression "git -C `"$_`" stash save -q --message `"$Token`""
-            if (Test-Stash $_ $Token) {
-                Invoke-Expression "git -C `"$_`" stash apply -q"
+            $stash = Test-Stash $_ $Token
+            if ($stash) {
+                Invoke-Expression "git -C `"$_`" stash apply $stash --index -q"
             }
         }
     }
@@ -305,12 +308,21 @@ function Step-SaveRepositories {
 function Step-Build {
     param(
         [string]$SolutionPath,
-        [string]$FrameworkOption,
         [ValidateSet('build', 'publish', 'pack')]
-        [string]$Task = "build"
+        [string]$Task = "build",
+        [string]$Framework,
+        [string]$Configuration
     )
     [string[]]$resultItems = $()
-    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo --configuration Release"
+    $frameworkOption = ""
+    $configurationOption = "--configuration Release"
+    if ($Framework) {
+        $frameworkOption = "--framework $Framework"
+    }
+    if ($Configuration) {
+        $configurationOption = "--configuration $Configuration"
+    }
+    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo $configurationOption"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
         $pattern1 = "^(?:\s+\d+\>)?([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
         $pattern2 = "^(.+)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
@@ -346,13 +358,13 @@ function Step-Build {
 function Step-ResolveProp {
     param(
         [string[]]$PropPaths,
-        [string[]]$Frameworks,
+        [string]$Framework,
         [string]$KeyPath,
         [switch]$Sign
     )
     $PropPaths | ForEach-Object {
         Write-Column "Name", "Value"
-        Initialize-Version $_ $Frameworks
+        Initialize-Version -ProjectPath $_ -Framework $Framework
         Initialize-Sign -ProjectPath $_ -KeyPath $KeyPath -Sign:$Sign
         Write-Log
     }
@@ -571,8 +583,8 @@ $location = Get-Location
 try {
     Write-Header "Initialize"
     
-    $frameworkOption = ""
-    $frameworks = "netcoreapp3.1", "net45"
+    # $frameworkOption = ""
+    # $frameworks = "netcoreapp3.1", "net45"
     $WorkingPath = Split-Path $SolutionPath
     $PropPaths = Resolve-Path $PropPaths
     if ("" -ne $KeyPath) {
@@ -589,39 +601,39 @@ try {
     Write-Property "Force" $Force
     Write-Log ""
 
-    Write-Header "TargetFrameworks"
-    Start-Log
-    Assert-NETCore -Version "3.1"
-    if (!(Test-NET45 -SolutionPath $SolutionPath)) {
-        $frameworkOption = "--framework netcoreapp3.1"
-        $frameworks = , "netcoreapp3.1"
-        Write-Log "netcoreapp3.1"
-    }
-    else {
-        Write-Log "netcoreapp3.1"
-        Write-Log "net45"
-    }
-    Stop-Log
-    Write-Log
+    # Write-Header "TargetFrameworks"
+    # Start-Log
+    # Assert-NETCore -Version "3.1"
+    # if (!(Test-NET45 -SolutionPath $SolutionPath)) {
+    #     $frameworkOption = "--framework netcoreapp3.1"
+    #     $frameworks = , "netcoreapp3.1"
+    #     Write-Log "netcoreapp3.1"
+    # }
+    # else {
+    #     Write-Log "netcoreapp3.1"
+    #     Write-Log "net45"
+    # }
+    # Stop-Log
+    # Write-Log
 
     # check if there are any changes in the repository.
     Write-Header "Repository changes"
-    Step-RepositoryChanges $repositoryPaths -Force:$Force
+    Step-RepositoryChanges -RepositoryPaths $repositoryPaths -Force:$Force
     Write-Log
 
     # save repositories if there is any changes.
     Write-Header "Save repositories"
-    Step-SaveRepositories $SolutionPath $token -Force:$Force
+    Step-SaveRepositories -SolutionPath $SolutionPath -Token $token -Force:$Force
     Write-Log
 
     # recored version and keypath to props file
     Write-Header "Set Information to props files"
-    Step-ResolveProp $PropPaths -Frameworks $frameworks -KeyPath $KeyPath -Sign:$Sign
+    Step-ResolveProp -PropPaths $PropPaths -Framework $Framework -KeyPath $KeyPath -Sign:$Sign
     Write-Log
 
     # resolve solution
     Write-Header "Resolve Solution"
-    Step-ResolveSolution $SolutionPath
+    Step-ResolveSolution -SolutionPath $SolutionPath
     Write-Log
  
     # build project
@@ -635,6 +647,6 @@ try {
     Write-Log
 }
 finally {
-    Restore-Repositories $SolutionPath $token -Force:$Force
+    Restore-Repositories -SolutionPath $SolutionPath -Token $token -Force:$Force
     Set-Location $location
 }

@@ -5,13 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "PowerShell: Launch Current File",
+            "name": "PowerShell: Font-Generator",
             "type": "PowerShell",
             "request": "launch",
-            "script": "${cwd}/build-sample.ps1",
+            "script": "${cwd}/build-font-generator.ps1",
             "args": [
-                "-LogPath", "logs\\log.md",
-                "-Sign"
+                "-LogPath", "logs/log.md",
+                "-Force"
+            ],
+            "cwd": "${cwd}"
+        },
+        {
+            "name": "PowerShell: Crema",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${cwd}/build-crema.ps1",
+            "args": [
+                "-LogPath", "logs/log.md"
             ],
             "cwd": "${cwd}"
         }
