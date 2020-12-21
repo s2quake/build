@@ -273,6 +273,7 @@ function Step-RepositoryChanges {
             Start-Log
             Write-Log "no changes."
             Stop-Log
+            Write-Log
         }
     }
     finally {
