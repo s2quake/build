@@ -159,8 +159,10 @@ function Restore-Files {
     )
     $FilePaths | ForEach-Object {
         $path = "$_.bak";
-        Copy-Item $path $_ -Force
-        Remove-Item $path
+        if (Test-Path $path) {
+            Copy-Item $path $_ -Force
+            Remove-Item $path
+        }
     }
 }
 
@@ -421,8 +423,10 @@ function Resolve-LogPath {
         }
         $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
     }
-    $LogPath = Resolve-Path $LogPath
     Set-Content $LogPath "" -Encoding UTF8
+    if ($LastExitCode -ne 0) {
+        exit $LastExitCode
+    }
     return $LogPath
 }
 
