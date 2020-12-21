@@ -148,7 +148,7 @@ function Test-Stash {
         [string]$RepositoryPath,
         [guid]$Token
     )
-    $pattern = "^(stash@{\d+}):\s.+:\s($Token)`$";
+    $pattern = "^stash@{(\d+)}:\s.+:\s($Token)`$";
     [array]$items = Invoke-Expression "git -C `"$RepositoryPath`" stash list"
     if (($items -is [array]) -and ($items.Length)) {
         if ($items[0] -match $pattern) {
@@ -166,8 +166,11 @@ function Restore-Repositories {
     $items = Get-RepositoryPaths $SolutionPath
     $items | ForEach-Object {
         Invoke-Expression "git -C `"$_`" reset --hard -q"
-        if ($Force -and (Test-Stash $_ $Token)) {
-            Invoke-Expression "git -C `"$_`" stash pop -q"
+        if ($Force) {
+            $stash = Test-Stash -RepositoryPath $_ -Token $Token
+            if ($stash) {
+                Invoke-Expression "git -C `"$_`" stash pop $stash -q"
+            }
         }
     }
 }
@@ -219,7 +222,7 @@ function Initialize-Sign {
     $node = $doc.CreateElement("DelaySign", $doc.DocumentElement.NamespaceURI)
     if ($true -eq $delaySign) {
         $text = $doc.CreateTextNode("true")
-    } 
+    }
     else {
         $text = $doc.CreateTextNode("false")
     }
@@ -412,34 +415,6 @@ function Step-Result {
     Write-Host "LogPath: $LogPath"
     Write-Host
     Stop-Log
-}
-
-function Restore-ProjectPath {
-    param(
-        [string]$ProjectPath
-    )
-    $location = Get-Location
-    try {
-        Set-Location (Split-Path $ProjectPath)
-        Invoke-Expression "git checkout `"$ProjectPath`"" 2>&1
-    }
-    finally {
-        Set-Location $location        
-    }
-}
-
-function Restore-SolutionPath {
-    param(
-        [string]$SolutionPath
-    )
-    $location = Get-Location
-    try {
-        Set-Location (Split-Path $SolutionPath)
-        Invoke-Expression "git checkout `"$SolutionPath`"" 2>&1
-    }
-    finally {
-        Set-Location $location        
-    }
 }
 
 function Write-Header {
