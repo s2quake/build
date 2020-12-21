@@ -9,7 +9,7 @@ param(
     [string]$SolutionPath,
     [Parameter(Mandatory = $true)]
     [string[]]$PropPaths,
-    [ValidateSet('build', 'publish', 'pack')]
+    [ValidateSet("build", "publish", "pack")]
     [string]$Task = "build",
     [string]$KeyPath = "",
     [string]$LogPath = "",
@@ -143,35 +143,24 @@ function Get-RepositoryPaths {
     return $items
 }
 
-function Test-Stash {
+function Backup-Files {
     param(
-        [string]$RepositoryPath,
-        [guid]$Token
+        [string[]]$FilePaths
     )
-    $pattern = "^stash@{(\d+)}:\s.+:\s($Token)`$";
-    [array]$items = Invoke-Expression "git -C `"$RepositoryPath`" stash list"
-    if (($items -is [array]) -and ($items.Length)) {
-        if ($items[0] -match $pattern) {
-            return $Matches[1];
-        }
+    $FilePaths | ForEach-Object {
+        $path = "$_.bak";
+        Copy-Item $_ $path
     }
 }
 
-function Restore-Repositories {
+function Restore-Files {
     param(
-        [string]$SolutionPath,
-        [guid]$Token,
-        [switch]$Force
+        [string[]]$FilePaths
     )
-    $items = Get-RepositoryPaths $SolutionPath
-    $items | ForEach-Object {
-        Invoke-Expression "git -C `"$_`" reset --hard -q"
-        if ($Force) {
-            $stash = Test-Stash -RepositoryPath $_ -Token $Token
-            if ($stash) {
-                Invoke-Expression "git -C `"$_`" stash pop $stash -q"
-            }
-        }
+    $FilePaths | ForEach-Object {
+        $path = "$_.bak";
+        Copy-Item $path $_ -Force
+        Remove-Item $path
     }
 }
 
@@ -356,6 +345,7 @@ function Step-Build {
     Start-Log
     Write-Log $resultItems
     Stop-Log
+    Write-Log
 }
 
 function Step-ResolveProp {
@@ -377,21 +367,21 @@ function Step-ResolveSolution {
     param(
         [string]$SolutionPath
     )
-    if ([environment]::OSVersion.Platform -eq "Win32NT") {
-        Start-Log
-        Write-Log "there is no problems to resolve."
-        Stop-Log
-    }
-    else {
+    $isModified = $false
+    if ([environment]::OSVersion.Platform -ne "Win32NT") {
         $projectPaths = Get-ProjectPaths $SolutionPath
         $projectPaths | ForEach-Object {
             $projectType = Get-ProjectType $_
             if ($projectType -eq "Microsoft.NET.Sdk.WindowsDesktop") {
                 Invoke-Expression "dotnet sln `"$SolutionPath`" remove `"$_`""
                 Write-Log $_ -LogType "Warning" -Label "The project cannot be built on the current platform."
-                Write-Log
             }
         }
+    }
+    if ($isModified) {
+        Start-Log
+        Write-Log "there is no problems to resolve."
+        Stop-Log
     }
 }
 
@@ -415,6 +405,24 @@ function Step-Result {
     Write-Host "LogPath: $LogPath"
     Write-Host
     Stop-Log
+}
+
+function Resolve-LogPath {
+    param(
+        [string]$LogPath,
+        [datetime]$DateTime
+    )
+    if ($LogPath -eq "") {
+        $dateTimeText = $DateTime.ToString("yyyy-MM-dd_hh-mm-ss")
+        $logDirectory = Join-Path (Get-Location) "logs"
+        if (!(Test-Path $logDirectory)) {
+            New-Item $logDirectory -ItemType Directory
+        }
+        $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
+    }
+    $LogPath = Resolve-Path $LogPath
+    Set-Content $LogPath "" -Encoding UTF8
+    return $LogPath
 }
 
 function Write-Header {
@@ -538,90 +546,61 @@ function Write-BuildError {
     Write-Log "_________________"
 }
 
-$token = New-Guid
-$platform = $PSVersionTable.Platform
-$SolutionPath = Resolve-Path $SolutionPath
-$repositoryPaths = Get-RepositoryPaths $SolutionPath
-
-$dateTime = Get-Date
-if ($LogPath -eq "") {
-    $dateTimeText = $dateTime.ToString("yyyy-MM-dd_hh-mm-ss")
-    $logDirectory = Join-Path (Get-Location) "logs"
-    if (!(Test-Path $logDirectory)) {
-        New-Item $logDirectory -ItemType Directory
-    }
-    $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
-}
-Set-Content $LogPath "" -Encoding UTF8
-
 $location = Get-Location
 try {
+    $dateTime = Get-Date
+    $LogPath = Resolve-LogPath $LogPath $dateTime
+
+    # initialize
     Write-Header "Initialize"
     
-    # $frameworkOption = ""
-    # $frameworks = "netcoreapp3.1", "net45"
-    $WorkingPath = Split-Path $SolutionPath
+    $SolutionPath = Resolve-Path $SolutionPath
     $PropPaths = Resolve-Path $PropPaths
     if ("" -ne $KeyPath) {
         $KeyPath = Resolve-Path $KeyPath
     }
-
+    
     Write-Column "Name", "Value"
     Write-Property "DateTime" $dateTime.ToString()
     Write-Property "SolutionPath" $SolutionPath
-    Write-Property "WorkingPath" $WorkingPath
-    Write-Property "PropPaths" $PropPaths
+    Write-Property "WorkingPath" (Split-Path $SolutionPath)
+    for ($i = 0 ; $i -lt $PropPaths.Length; $i++) {
+        Write-Property "PropPaths: $i" $PropPaths[$i]
+    }
+    Write-Property "Task" $Task
+    Write-Property "Framework" $Framework
+    Write-Property "Configuration" $Configuration
     Write-Property "KeyPath" $KeyPath
     Write-Property "OmitSign" $OmitSign
     Write-Property "Force" $Force
-    Write-Log ""
+    Write-Log
 
-    # Write-Header "TargetFrameworks"
-    # Start-Log
-    # Assert-NETCore -Version "3.1"
-    # if (!(Test-NET45 -SolutionPath $SolutionPath)) {
-    #     $frameworkOption = "--framework netcoreapp3.1"
-    #     $frameworks = , "netcoreapp3.1"
-    #     Write-Log "netcoreapp3.1"
-    # }
-    # else {
-    #     Write-Log "netcoreapp3.1"
-    #     Write-Log "net45"
-    # }
-    # Stop-Log
-    # Write-Log
+    $repositoryPaths = Get-RepositoryPaths $SolutionPath
 
     # check if there are any changes in the repository.
     Write-Header "Repository changes"
     Step-RepositoryChanges -RepositoryPaths $repositoryPaths -Force:$Force
-    Write-Log
-
-    # save repositories if there is any changes.
-    Write-Header "Save repositories"
-    Step-SaveRepositories -SolutionPath $SolutionPath -Token $token -Force:$Force
-    Write-Log
+    Backup-Files -FilePaths $PropPaths
+    Backup-Files -FilePaths $SolutionPath
 
     # recored version and keypath to props file
     Write-Header "Set Information to props files"
     Step-ResolveProp -PropPaths $PropPaths -Framework $Framework -KeyPath $KeyPath -Sign:$Sign
-    Write-Log
 
     # resolve solution
     Write-Header "Resolve Solution"
     Step-ResolveSolution -SolutionPath $SolutionPath
-    Write-Log
  
     # build project
     Write-Header "Build"
-    Step-Build -SolutionPath $SolutionPath -Framework $frameworkOption -Task $Task
-    Write-Log
+    Step-Build -SolutionPath $SolutionPath -Task $Task -Framework $Framework -Configuration $Configuration
 
     # record build result
     Write-Header "Result"
     Step-Result -DateTime $dateTime
-    Write-Log
 }
 finally {
-    Restore-Repositories -SolutionPath $SolutionPath -Token $token -Force:$Force
+    Restore-Files -FilePaths $PropPaths
+    Restore-Files -FilePaths $SolutionPath
     Set-Location $location
 }
