@@ -161,8 +161,10 @@ function Restore-Files {
     )
     $FilePaths | ForEach-Object {
         $path = "$_.bak";
-        Copy-Item $path $_ -Force
-        Remove-Item $path
+        if (Test-Path $path) {
+            Copy-Item $path $_ -Force
+            Remove-Item $path
+        }
     }
 }
 
@@ -415,24 +417,6 @@ function Step-Result {
     Stop-Log
 }
 
-function Resolve-LogPath {
-    param(
-        [string]$LogPath,
-        [datetime]$DateTime
-    )
-    if ($LogPath -eq "") {
-        $dateTimeText = $DateTime.ToString("yyyy-MM-dd_hh-mm-ss")
-        $logDirectory = Join-Path (Get-Location) "logs"
-        if (!(Test-Path $logDirectory)) {
-            New-Item $logDirectory -ItemType Directory
-        }
-        $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
-    }
-    $LogPath = Resolve-Path $LogPath
-    Set-Content $LogPath "" -Encoding UTF8
-    return $LogPath
-}
-
 function Write-Header {
     param(
         [string]$Header,
@@ -557,7 +541,15 @@ function Write-BuildError {
 $location = Get-Location
 try {
     $dateTime = Get-Date
-    $LogPath = Resolve-LogPath $LogPath $dateTime
+    if ($LogPath -eq "") {
+        $dateTimeText = $dateTime.ToString("yyyy-MM-dd_hh-mm-ss")
+        $logDirectory = Join-Path (Get-Location) "logs"
+        if (!(Test-Path $logDirectory)) {
+            New-Item $logDirectory -ItemType Directory
+        }
+        $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
+    }
+    Set-Content $LogPath "" -Encoding UTF8 -ErrorAction Stop
 
     # initialize
     Write-Header "Initialize"
