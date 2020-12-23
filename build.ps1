@@ -17,7 +17,7 @@ param(
     [string]$Framework = "netcoreapp3.1",
     [string]$OutputPath = "",
     [switch]$Sign,
-    [switch]$OmitDebugSymbol,
+    [switch]$OmitSymbol,
     [switch]$Force
 )
 
@@ -307,13 +307,11 @@ function Step-Build {
         [string]$Task = "build",
         [string]$Framework,
         [string]$Configuration,
-        [string]$OutputPath,
-        [switch]$OmitDebugSymbol
+        [switch]$OmitSymbol
     )
     [string[]]$resultItems = $()
     $frameworkOption = ""
     $configurationOption = "--configuration Release"
-    $outputPathOption = ""
     $symbolOption = ""
     if ($Framework) {
         $frameworkOption = "--framework $Framework"
@@ -321,10 +319,7 @@ function Step-Build {
     if ($Configuration) {
         $configurationOption = "--configuration $Configuration"
     }
-    if ($OutputPath) {
-        $outputPathOption = "--output `"$OutputPath`""
-    }
-    if ($OmitDebugSymbol) {
+    if ($OmitSymbol) {
         $symbolOption = "-p:DebugType=None -p:DebugSymbols=false"
     }
     $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo $configurationOption $outputPathOption $symbolOption"
@@ -606,7 +601,7 @@ try {
  
     # build project
     Write-Header "Build"
-    Step-Build -SolutionPath $SolutionPath -Task $Task -Framework $Framework -Configuration $Configuration -OutputPath $OutputPath -OmitDebugSymbol:$OmitDebugSymbol
+    Step-Build -SolutionPath $SolutionPath -Task $Task -Framework $Framework -Configuration $Configuration -OmitSymbol:$OmitSymbol
 
     # record build result
     Write-Header "Result"
