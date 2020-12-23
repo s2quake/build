@@ -15,7 +15,9 @@ param(
     [string]$LogPath = "",
     [string]$Configuration = "Release",
     [string]$Framework = "netcoreapp3.1",
+    [string]$OutputPath = "",
     [switch]$Sign,
+    [switch]$OmitDebugSymbol,
     [switch]$Force
 )
 
@@ -304,18 +306,28 @@ function Step-Build {
         [ValidateSet('build', 'publish', 'pack')]
         [string]$Task = "build",
         [string]$Framework,
-        [string]$Configuration
+        [string]$Configuration,
+        [string]$OutputPath,
+        [switch]$OmitDebugSymbol
     )
     [string[]]$resultItems = $()
     $frameworkOption = ""
     $configurationOption = "--configuration Release"
+    $outputPathOption = ""
+    $symbolOption = ""
     if ($Framework) {
         $frameworkOption = "--framework $Framework"
     }
     if ($Configuration) {
         $configurationOption = "--configuration $Configuration"
     }
-    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo $configurationOption"
+    if ($OutputPath) {
+        $outputPathOption = "--output `"$OutputPath`""
+    }
+    if ($OmitDebugSymbol) {
+        $symbolOption = "-p:DebugType=None -p:DebugSymbols=false"
+    }
+    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo $configurationOption $outputPathOption $symbolOption"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
         $pattern1 = "^(?:\s+\d+\>)?([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
         $pattern2 = "^(.+)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
@@ -594,7 +606,7 @@ try {
  
     # build project
     Write-Header "Build"
-    Step-Build -SolutionPath $SolutionPath -Task $Task -Framework $Framework -Configuration $Configuration
+    Step-Build -SolutionPath $SolutionPath -Task $Task -Framework $Framework -Configuration $Configuration -OutputPath $OutputPath -OmitDebugSymbol:$OmitDebugSymbol
 
     # record build result
     Write-Header "Result"
