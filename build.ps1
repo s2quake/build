@@ -309,11 +309,13 @@ function Step-Build {
         [string]$Task = "build",
         [string]$Framework,
         [string]$Configuration,
+        [string]$OutputPath,
         [switch]$OmitSymbol
     )
     [string[]]$resultItems = $()
     $frameworkOption = ""
     $configurationOption = "--configuration Release"
+    $outputOption = ""
     $symbolOption = ""
     if ($Framework) {
         $frameworkOption = "--framework $Framework"
@@ -321,10 +323,13 @@ function Step-Build {
     if ($Configuration) {
         $configurationOption = "--configuration $Configuration"
     }
+    if ($OutputPath) {
+        $outputOption = "--output `"$OutputPath`""
+    }
     if ($OmitSymbol) {
         $symbolOption = "-p:DebugType=None -p:DebugSymbols=false"
     }
-    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo $configurationOption $outputPathOption $symbolOption"
+    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo $configurationOption $outputOption $symbolOption"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
         $pattern1 = "^(?:\s+\d+\>)?([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
         $pattern2 = "^(.+)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
@@ -593,7 +598,7 @@ try {
  
     # build project
     Write-Header "Build"
-    Step-Build -SolutionPath $SolutionPath -Task $Task -Framework $Framework -Configuration $Configuration -OmitSymbol:$OmitSymbol
+    Step-Build -SolutionPath $SolutionPath -Task $Task -Framework $Framework -Configuration $Configuration -OutputPath $OutputPath -OmitSymbol:$OmitSymbol
 
     # record build result
     Write-Header "Result"
