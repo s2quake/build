@@ -2,22 +2,65 @@
     .SYNOPSIS
         빌드
     .DESCRIPTION
+        build description,
+    .PARAMETER SolutionPath
+        test description for SolutionPath
         
 #>
+[CmdletBinding(DefaultParameterSetName = 'Build')]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = "Build", Position = 0)]
+    [Parameter(Mandatory = $true, ParameterSetName = "Publish", Position = 0)]
+    [Parameter(Mandatory = $true, ParameterSetName = "Pack", Position = 0)]
     [string]$SolutionPath,
-    [Parameter(Mandatory = $true)]
+
+    [Parameter(Mandatory = $true, ParameterSetName = "Build", Position = 1)]
+    [Parameter(Mandatory = $true, ParameterSetName = "Publish", Position = 1)]
+    [Parameter(Mandatory = $true, ParameterSetName = "Pack", Position = 1)]
     [string[]]$PropPaths,
+
+    [Parameter(ParameterSetName = "Build")]
     [ValidateSet("build", "publish", "pack")]
     [string]$Task = "build",
+
+    [Parameter(ParameterSetName = "Publish", Position = 2)]
+    [switch]$Publish,
+
+    [Parameter(ParameterSetName = "Pack", Position = 2)]
+    [switch]$Pack,
+
+    [Parameter(ParameterSetName = "Build")]
+    [Parameter(ParameterSetName = "Publish")]
+    [Parameter(ParameterSetName = "Pack")]
     [string]$KeyPath = "",
+
+    [Parameter(ParameterSetName = "Build")]
+    [Parameter(ParameterSetName = "Publish")]
+    [Parameter(ParameterSetName = "Pack")]
     [string]$LogPath = "",
+
+    [Parameter(ParameterSetName = "Build")]
     [string]$Configuration = "Release",
+
+    [Parameter(ParameterSetName = "Build")]
     [string]$Framework = "netcoreapp3.1",
+
+    [Parameter(ParameterSetName = "Build")]
+    [Parameter(ParameterSetName = "Publish")]
+    [Parameter(ParameterSetName = "Pack")]
     [string]$OutputPath = "",
+
+    [Parameter(ParameterSetName = "Build")]
+    [Parameter(ParameterSetName = "Publish")]
+    [Parameter(ParameterSetName = "Pack")]
     [switch]$Sign,
+
+    [Parameter(ParameterSetName = "Build")]
     [switch]$OmitSymbol,
+
+    [Parameter(ParameterSetName = "Build")]
+    [Parameter(ParameterSetName = "Publish")]
+    [Parameter(ParameterSetName = "Pack")]
     [switch]$Force
 )
 
@@ -329,7 +372,8 @@ function Step-Build {
     if ($OmitSymbol) {
         $symbolOption = "-p:DebugType=None -p:DebugSymbols=false"
     }
-    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption --verbosity quiet --nologo $configurationOption $outputOption $symbolOption"
+    # --verbosity quiet --nologo 
+    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption $configurationOption --verbosity m $outputOption $symbolOption"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
         $pattern1 = "^(?:\s+\d+\>)?([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
         $pattern2 = "^(.+)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
@@ -540,7 +584,12 @@ function Write-BuildError {
     }
     Write-Property "Message" $message -OmitLog
     Write-Property "Project" $project -OmitLog
-    Write-Log "_________________"
+    Write-Log "________________________________________________________________________________"
+}
+
+if ($Publish) {
+    $Configuration = "Release"
+    $OmitSymbol = $true
 }
 
 $location = Get-Location
@@ -561,7 +610,10 @@ try {
     
     $SolutionPath = Resolve-Path $SolutionPath
     $PropPaths = Resolve-Path $PropPaths
-    if ("" -ne $KeyPath) {
+    if ($OutputPath) {
+        $OutputPath = Resolve-Path $OutputPath
+    }
+    if ($KeyPath) {
         $KeyPath = Resolve-Path $KeyPath
     }
     
@@ -575,6 +627,7 @@ try {
     Write-Property "Task" $Task
     Write-Property "Framework" $Framework
     Write-Property "Configuration" $Configuration
+    Write-Property "OutputPath" $OutputPath
     Write-Property "KeyPath" $KeyPath
     Write-Property "OmitSign" $OmitSign
     Write-Property "Force" $Force
