@@ -6,6 +6,7 @@ param(
     [switch]$Force
 )
 
+$OutputPath = Resolve-Path $OutputPath
 $location = Get-Location
 try {
     Set-Location $PSScriptRoot
