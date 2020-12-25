@@ -590,6 +590,12 @@ function Write-BuildError {
 if ($Publish) {
     $Configuration = "Release"
     $OmitSymbol = $true
+    $Task = "publish"
+}
+elseif ($Pack) {
+    $Configuration = "Release"
+    $OmitSymbol = $true
+    $Task = "pack"
 }
 
 $location = Get-Location
@@ -608,13 +614,13 @@ try {
     # initialize
     Write-Header "Initialize"
     
-    $SolutionPath = Resolve-Path $SolutionPath
-    $PropPaths = Resolve-Path $PropPaths
+    $SolutionPath = Resolve-Path $SolutionPath -ErrorAction Stop
+    $PropPaths = Resolve-Path $PropPaths -ErrorAction Stop
     if ($OutputPath) {
-        $OutputPath = Resolve-Path $OutputPath
+        $OutputPath = Resolve-Path $OutputPath -ErrorAction Stop
     }
     if ($KeyPath) {
-        $KeyPath = Resolve-Path $KeyPath
+        $KeyPath = Resolve-Path $KeyPath  -ErrorAction Stop
     }
     
     Write-Column "Name", "Value"
