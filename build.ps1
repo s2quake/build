@@ -456,14 +456,16 @@ function Step-Result {
         Write-Log "Start Time  : $($DateTime.ToString())"
         Write-Log "End Time    : $($lastTime.ToString())"
         Write-Log "Elapsed time: $timeSpan"
+        Write-Host "LogPath     : $LogPath"
+        if ($OutputPath) {
+            Write-Host "OutputPath  : $OutputPath"
+        }
         Write-Log "build completed."
     }
     else {
+        Write-Host "LogPath: $LogPath"
         Write-Log "build failed" -LogType "Error"
     }
-    Write-Host
-    Write-Host "LogPath: $LogPath"
-    Write-Host
     Stop-Log
 }
 
