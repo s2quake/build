@@ -43,6 +43,7 @@ param(
     [string]$Configuration = "Release",
 
     [Parameter(ParameterSetName = "Build")]
+    [Parameter(ParameterSetName = "Publish")]
     [string]$Framework = "netcoreapp3.1",
 
     [Parameter(ParameterSetName = "Build")]

@@ -12,7 +12,7 @@
             "args": [
                 "-Force",
             ],
-            "cwd": "${cwd}"
+            "cwd": "~/Publish"
         },
         {
             "name": "PowerShell: Crema",
