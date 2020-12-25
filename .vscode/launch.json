@@ -10,8 +10,7 @@
             "request": "launch",
             "script": "${cwd}/build-font-generator.ps1",
             "args": [
-                "-LogPath", "logs/log.md",
-                "-Force"
+                "-Force",
             ],
             "cwd": "${cwd}"
         },
@@ -21,7 +20,11 @@
             "request": "launch",
             "script": "${cwd}/build-crema.ps1",
             "args": [
-                "-LogPath", "logs/log.md"
+                "-LogPath", "logs/log.md",
+                "-Force", "-Sign",
+                "-Framework", "netcoreapp3.1",
+                "-Task", "publish",
+                "-OmitSymbol"
             ],
             "cwd": "${cwd}"
         }

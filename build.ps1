@@ -373,7 +373,7 @@ function Step-Build {
         $symbolOption = "-p:DebugType=None -p:DebugSymbols=false"
     }
     # --verbosity quiet --nologo 
-    $expression = "dotnet $Task `"$SolutionPath`" $FrameworkOption $configurationOption --verbosity m $outputOption $symbolOption"
+    $expression = "dotnet $Task `"$SolutionPath`" $frameworkOption $configurationOption --verbosity m $outputOption $symbolOption"
     Invoke-Expression $expression | Tee-Object -Variable items | ForEach-Object {
         $pattern1 = "^(?:\s+\d+\>)?([^\s].*)\((\d+|\d+,\d+|\d+,\d+,\d+,\d+)\)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
         $pattern2 = "^(.+)\s*:\s+(error|warning|info)\s+(\w{1,2}\d+)\s*:\s*(.+)\[(.+)\]$"
@@ -594,6 +594,7 @@ if ($Publish) {
 }
 elseif ($Pack) {
     $Configuration = "Release"
+    $Framework = ""
     $OmitSymbol = $true
     $Task = "pack"
 }
