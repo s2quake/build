@@ -294,15 +294,17 @@ function Initialize-Sign {
 function Resolve-LogPath {
     param(
         [string]$LogPath,
-        [datetime]$DateTime
+        [datetime]$DateTime,
+        [string]$SolutionPath
     )
     if (!$LogPath) {
         $dateTimeText = $DateTime.ToString("yyyy-MM-dd_hh-mm-ss")
         $logDirectory = Join-Path (Get-Location) "logs"
+        $name = (Get-Item $SolutionPath).BaseName
         if (!(Test-Path $logDirectory)) {
             $logDirectory = New-Item $logDirectory -ItemType Directory -ErrorAction Stop
         }
-        $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
+        $LogPath = Join-Path $logDirectory "$name-$($dateTimeText).md"
     }
     Set-Content $LogPath "" -Encoding UTF8 -ErrorAction Stop
     return $LogPath
@@ -610,7 +612,7 @@ function Write-BuildError {
 $location = Get-Location
 try {
     $dateTime = Get-Date
-    $LogPath = Resolve-LogPath $LogPath $dateTime
+    $LogPath = Resolve-LogPath $LogPath $dateTime $SolutionPath
 
     # initialize
     Write-Header "Initialize"
