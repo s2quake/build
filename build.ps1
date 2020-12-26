@@ -18,10 +18,10 @@ param(
     [ValidateSet("build", "publish", "pack")]
     [string]$Task = "build",
 
-    [Parameter(ParameterSetName = "Publish", Position = 2)]
+    [Parameter(ParameterSetName = "Publish", Position = 1)]
     [switch]$Publish,
 
-    [Parameter(ParameterSetName = "Pack", Position = 2)]
+    [Parameter(ParameterSetName = "Pack", Position = 1)]
     [switch]$Pack,
 
     [Parameter(ParameterSetName = "Build")]
