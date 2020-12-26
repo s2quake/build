@@ -14,14 +14,19 @@ param(
     [Parameter(Mandatory = $true, ParameterSetName = "Pack", Position = 0)]
     [string]$SolutionPath,
 
+    [Parameter(Mandatory = $true, ParameterSetName = "Build", Position = 1)]
+    [Parameter(Mandatory = $true, ParameterSetName = "Publish", Position = 1)]
+    [Parameter(Mandatory = $true, ParameterSetName = "Pack", Position = 1)]
+    [string[]]$PropPaths,
+
     [Parameter(ParameterSetName = "Build")]
     [ValidateSet("build", "publish", "pack")]
     [string]$Task = "build",
 
-    [Parameter(ParameterSetName = "Publish", Position = 1)]
+    [Parameter(ParameterSetName = "Publish", Position = 2)]
     [switch]$Publish,
 
-    [Parameter(ParameterSetName = "Pack", Position = 1)]
+    [Parameter(ParameterSetName = "Pack", Position = 2)]
     [switch]$Pack,
 
     [Parameter(ParameterSetName = "Build")]
@@ -223,15 +228,16 @@ function Initialize-Version {
     try {
         $revision = Get-Revision $ProjectPath
         [xml]$doc = Get-Content $ProjectPath -Encoding UTF8
-        if ($doc.Project.PropertyGroup.FileVersion) {
-            $version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
-            $versionText = "$($doc.Project.PropertyGroup.FileVersion)-$Framework-$revision"
-            $doc.Project.PropertyGroup.Version = $version
-            $doc.Save($ProjectPath)
-            
-            Write-Property "Path" $ProjectPath
-            Write-Property "Version" $versionText
+        if ($null -eq $doc.Project.PropertyGroup.FileVersion) {
+            throw "there is no version"
         }
+        $version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
+        $versionText = "$($doc.Project.PropertyGroup.FileVersion)-$Framework-$revision"
+        $doc.Project.PropertyGroup.Version = $version
+        $doc.Save($ProjectPath)
+        
+        Write-Property "Path" $ProjectPath
+        Write-Property "Version" $versionText
     }
     catch {
         Write-Log $_.Exception.Message -LogType "Error"
@@ -604,13 +610,22 @@ function Write-BuildError {
 $location = Get-Location
 try {
     $dateTime = Get-Date
+    # if (!$LogPath) {
+    #     $dateTimeText = $dateTime.ToString("yyyy-MM-dd_hh-mm-ss")
+    #     $logDirectory = Join-Path (Get-Location) "logs"
+    #     if (!(Test-Path $logDirectory)) {
+    #         New-Item $logDirectory -ItemType Directory -ErrorAction Stop
+    #     }
+    #     $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
+    # }
+    # Set-Content $LogPath "" -Encoding UTF8 -ErrorAction Stop
     $LogPath = Resolve-LogPath $LogPath $dateTime
 
     # initialize
     Write-Header "Initialize"
 
     $SolutionPath = Resolve-Path $SolutionPath -ErrorAction Stop
-    $propPaths = Get-ChildItem (Split-Path $SolutionPath) "Directory.Build.props" -Recurse | ForEach-Object { $_.FullName }
+    $PropPaths = Resolve-Path $PropPaths -ErrorAction Stop
     if ($OutputPath) {
         $OutputPath = Resolve-Path $OutputPath -ErrorAction Stop
     }
@@ -622,6 +637,7 @@ try {
         $Configuration = "Release"
         $OmitSymbol = $true
         $Task = "publish"
+
         if (!$OutputPath) {
             $OutputPath = Join-Path (Split-Path $SolutionPath) "bin" -ErrorAction Stop
         }
@@ -647,8 +663,8 @@ try {
     Write-Property "DateTime" $dateTime.ToString()
     Write-Property "SolutionPath" $SolutionPath
     Write-Property "WorkingPath" (Split-Path $SolutionPath)
-    for ($i = 0 ; $i -lt $propPaths.Length; $i++) {
-        Write-Property "PropPaths: $i" $propPaths[$i]
+    for ($i = 0 ; $i -lt $PropPaths.Length; $i++) {
+        Write-Property "PropPaths: $i" $PropPaths[$i]
     }
     Write-Property "Task" $Task
     Write-Property "Framework" $Framework
@@ -664,12 +680,12 @@ try {
     # check if there are any changes in the repository.
     Write-Header "Repository changes"
     Step-RepositoryChanges -RepositoryPaths $repositoryPaths -Force:$Force
-    Backup-Files -FilePaths $propPaths
+    Backup-Files -FilePaths $PropPaths
     Backup-Files -FilePaths $SolutionPath
 
     # recored version and keypath to props file
     Write-Header "Set Information to props files"
-    Step-ResolveProp -PropPaths $propPaths -Framework $Framework -KeyPath $KeyPath -Sign:$Sign
+    Step-ResolveProp -PropPaths $PropPaths -Framework $Framework -KeyPath $KeyPath -Sign:$Sign
 
     # resolve solution
     Write-Header "Resolve Solution"
@@ -684,7 +700,7 @@ try {
     Step-Result -DateTime $dateTime
 }
 finally {
-    Restore-Files -FilePaths $propPaths
+    Restore-Files -FilePaths $PropPaths
     Restore-Files -FilePaths $SolutionPath
     Set-Location $location
 }
