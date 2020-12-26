@@ -10,9 +10,11 @@
             "request": "launch",
             "script": "${cwd}/build-font-generator.ps1",
             "args": [
+                "-OutputPath", "wow",
+                "-KeyPath", "/Users/s2quake-mac/Projects/private.snk",
                 "-Force",
             ],
-            "cwd": "~/Publish"
+            "cwd": "${cwd}"
         },
         {
             "name": "PowerShell: Crema",

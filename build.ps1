@@ -14,11 +14,6 @@ param(
     [Parameter(Mandatory = $true, ParameterSetName = "Pack", Position = 0)]
     [string]$SolutionPath,
 
-    [Parameter(Mandatory = $true, ParameterSetName = "Build", Position = 1)]
-    [Parameter(Mandatory = $true, ParameterSetName = "Publish", Position = 1)]
-    [Parameter(Mandatory = $true, ParameterSetName = "Pack", Position = 1)]
-    [string[]]$PropPaths,
-
     [Parameter(ParameterSetName = "Build")]
     [ValidateSet("build", "publish", "pack")]
     [string]$Task = "build",
@@ -228,16 +223,15 @@ function Initialize-Version {
     try {
         $revision = Get-Revision $ProjectPath
         [xml]$doc = Get-Content $ProjectPath -Encoding UTF8
-        if ($null -eq $doc.Project.PropertyGroup.FileVersion) {
-            throw "there is no version"
+        if ($doc.Project.PropertyGroup.FileVersion) {
+            $version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
+            $versionText = "$($doc.Project.PropertyGroup.FileVersion)-$Framework-$revision"
+            $doc.Project.PropertyGroup.Version = $version
+            $doc.Save($ProjectPath)
+            
+            Write-Property "Path" $ProjectPath
+            Write-Property "Version" $versionText
         }
-        $version = "$($doc.Project.PropertyGroup.FileVersion)-`$(TargetFramework)-$revision"
-        $versionText = "$($doc.Project.PropertyGroup.FileVersion)-$Framework-$revision"
-        $doc.Project.PropertyGroup.Version = $version
-        $doc.Save($ProjectPath)
-        
-        Write-Property "Path" $ProjectPath
-        Write-Property "Version" $versionText
     }
     catch {
         Write-Log $_.Exception.Message -LogType "Error"
@@ -289,6 +283,23 @@ function Initialize-Sign {
     Write-Property "DelaySign" "$($delaySign)"
     Write-Property "SignAssembly" "$($signAssembly)"
     Write-Property "AssemblyOriginatorKeyFile" $KeyPath
+}
+
+function Resolve-LogPath {
+    param(
+        [string]$LogPath,
+        [datetime]$DateTime
+    )
+    if (!$LogPath) {
+        $dateTimeText = $DateTime.ToString("yyyy-MM-dd_hh-mm-ss")
+        $logDirectory = Join-Path (Get-Location) "logs"
+        if (!(Test-Path $logDirectory)) {
+            New-Item $logDirectory -ItemType Directory -ErrorAction Stop
+        }
+        $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
+    }
+    Set-Content $LogPath "" -Encoding UTF8 -ErrorAction Stop
+    return $LogPath
 }
 
 function Step-RepositoryChanges {
@@ -590,49 +601,54 @@ function Write-BuildError {
     Write-Log "________________________________________________________________________________"
 }
 
-if ($Publish) {
-    $Configuration = "Release"
-    $OmitSymbol = $true
-    $Task = "publish"
-}
-elseif ($Pack) {
-    $Configuration = "Release"
-    $Framework = ""
-    $OmitSymbol = $true
-    $Task = "pack"
-}
-
 $location = Get-Location
 try {
     $dateTime = Get-Date
-    if ($LogPath -eq "") {
-        $dateTimeText = $dateTime.ToString("yyyy-MM-dd_hh-mm-ss")
-        $logDirectory = Join-Path (Get-Location) "logs"
-        if (!(Test-Path $logDirectory)) {
-            New-Item $logDirectory -ItemType Directory
-        }
-        $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
-    }
-    Set-Content $LogPath "" -Encoding UTF8 -ErrorAction Stop
+    $LogPath = Resolve-LogPath $LogPath $dateTime
 
     # initialize
     Write-Header "Initialize"
-    
+
     $SolutionPath = Resolve-Path $SolutionPath -ErrorAction Stop
-    $PropPaths = Resolve-Path $PropPaths -ErrorAction Stop
+    $propPaths = Get-ChildItem (Split-Path $SolutionPath) "Directory.Build.props" -Recurse | ForEach-Object { $_.FullName }
     if ($OutputPath) {
         $OutputPath = Resolve-Path $OutputPath -ErrorAction Stop
     }
     if ($KeyPath) {
-        $KeyPath = Resolve-Path $KeyPath  -ErrorAction Stop
+        $KeyPath = Resolve-Path $KeyPath -ErrorAction Stop
+    }
+
+    if ($Publish) {
+        $Configuration = "Release"
+        $OmitSymbol = $true
+        $Task = "publish"
+        if (!$OutputPath) {
+            $OutputPath = Join-Path (Split-Path $SolutionPath) "bin" -ErrorAction Stop
+        }
+        if (!(Test-Path $OutputPath)) {
+            New-Item $OutputPath -ItemType Directory -ErrorAction Stop
+        } 
+        $OutputPath = Resolve-Path $OutputPath
+    }
+    elseif ($Pack) {
+        $Configuration = "Release"
+        $Framework = ""
+        $OmitSymbol = $true
+        $Task = "pack"
+        if (!$OutputPath) {
+            $OutputPath = Join-Path (Split-Path $SolutionPath) "pack" -ErrorAction Stop
+        }
+        if (!(Test-Path $OutputPath)) {
+            New-Item $OutputPath -ItemType Directory -ErrorAction Stop
+        } 
     }
     
     Write-Column "Name", "Value"
     Write-Property "DateTime" $dateTime.ToString()
     Write-Property "SolutionPath" $SolutionPath
     Write-Property "WorkingPath" (Split-Path $SolutionPath)
-    for ($i = 0 ; $i -lt $PropPaths.Length; $i++) {
-        Write-Property "PropPaths: $i" $PropPaths[$i]
+    for ($i = 0 ; $i -lt $propPaths.Length; $i++) {
+        Write-Property "PropPaths: $i" $propPaths[$i]
     }
     Write-Property "Task" $Task
     Write-Property "Framework" $Framework
@@ -648,12 +664,12 @@ try {
     # check if there are any changes in the repository.
     Write-Header "Repository changes"
     Step-RepositoryChanges -RepositoryPaths $repositoryPaths -Force:$Force
-    Backup-Files -FilePaths $PropPaths
+    Backup-Files -FilePaths $propPaths
     Backup-Files -FilePaths $SolutionPath
 
     # recored version and keypath to props file
     Write-Header "Set Information to props files"
-    Step-ResolveProp -PropPaths $PropPaths -Framework $Framework -KeyPath $KeyPath -Sign:$Sign
+    Step-ResolveProp -PropPaths $propPaths -Framework $Framework -KeyPath $KeyPath -Sign:$Sign
 
     # resolve solution
     Write-Header "Resolve Solution"
@@ -668,7 +684,7 @@ try {
     Step-Result -DateTime $dateTime
 }
 finally {
-    Restore-Files -FilePaths $PropPaths
+    Restore-Files -FilePaths $propPaths
     Restore-Files -FilePaths $SolutionPath
     Set-Location $location
 }
