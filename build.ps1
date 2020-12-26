@@ -300,7 +300,7 @@ function Resolve-LogPath {
         $dateTimeText = $DateTime.ToString("yyyy-MM-dd_hh-mm-ss")
         $logDirectory = Join-Path (Get-Location) "logs"
         if (!(Test-Path $logDirectory)) {
-            New-Item $logDirectory -ItemType Directory -ErrorAction Stop
+            $logDirectory = New-Item $logDirectory -ItemType Directory -ErrorAction Stop
         }
         $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
     }
@@ -610,15 +610,6 @@ function Write-BuildError {
 $location = Get-Location
 try {
     $dateTime = Get-Date
-    # if (!$LogPath) {
-    #     $dateTimeText = $dateTime.ToString("yyyy-MM-dd_hh-mm-ss")
-    #     $logDirectory = Join-Path (Get-Location) "logs"
-    #     if (!(Test-Path $logDirectory)) {
-    #         New-Item $logDirectory -ItemType Directory -ErrorAction Stop
-    #     }
-    #     $LogPath = Join-Path $logDirectory "$($dateTimeText).md"
-    # }
-    # Set-Content $LogPath "" -Encoding UTF8 -ErrorAction Stop
     $LogPath = Resolve-LogPath $LogPath $dateTime
 
     # initialize
