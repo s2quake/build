@@ -1,6 +1,0 @@
-[submodule "font-generator"]
-	path = font-generator
-	url = https://github.com/s2quake/font-generator.git
-[submodule "crema"]
-	path = crema
-	url = https://github.com/s2quake/crema.git
