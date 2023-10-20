@@ -114,12 +114,9 @@ function Step-Build {
         else {
             $resultItems += $_
         }
-        Write-Host $_
+        Write-Log $_
     }
 
-    Start-Log
-    Write-Log $resultItems
-    Stop-Log
     Write-Log
 }
 
